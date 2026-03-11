@@ -124,6 +124,20 @@ src/
 - **Dialogue** — 对白（角色、文本、音频）
 - **Task** — 后台任务队列
 
+## 界面截图
+
+| 项目列表 | 剧本生成 |
+|:---:|:---:|
+| ![项目列表](images/demo/list.png) | ![剧本生成](images/demo/剧本生成.png) |
+
+| 角色解析 | 分镜 |
+|:---:|:---:|
+| ![角色解析](images/demo/角色解析.png) | ![分镜](images/demo/分镜.png) |
+
+| 预览 | 模型配置 |
+|:---:|:---:|
+| ![预览](images/demo/预览.png) | ![模型配置](images/demo/模型配置.png) |
+
 ## Demo
 
 https://ladr-1258957911.cos.ap-guangzhou.myqcloud.com/jadeai/demo1.mp4
