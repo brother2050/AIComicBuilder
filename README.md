@@ -67,7 +67,7 @@ docker run -d \
   -p 3000:3000 \
   -v ./data:/app/data \
   -v ./uploads:/app/uploads \
-  twwch/jadeai:latest
+  twwch/aicomicbuilder:latest
 ```
 
 启动后在设置页面中配置 AI 模型供应商（OpenAI / Gemini / Seedance）。
@@ -79,7 +79,7 @@ docker run -d \
 ```yaml
 services:
   ai-comic-builder:
-    image: twwch/jadeai:latest
+    image: twwch/aicomicbuilder:latest
     ports:
       - "3000:3000"
     volumes:
