@@ -1,6 +1,7 @@
 import { OpenAIProvider } from "./providers/openai";
 import { GeminiProvider } from "./providers/gemini";
 import { SeedanceProvider } from "./providers/seedance";
+import { VeoProvider } from "./providers/veo";
 import { getAIProvider, getVideoProvider } from "./index";
 import type { AIProvider, VideoProvider } from "./types";
 
@@ -40,6 +41,12 @@ export function createVideoProvider(config: ProviderConfig): VideoProvider {
   switch (config.protocol) {
     case "seedance":
       return new SeedanceProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+      });
+    case "gemini":
+      return new VeoProvider({
         apiKey: config.apiKey,
         baseUrl: config.baseUrl,
         model: config.modelId,
