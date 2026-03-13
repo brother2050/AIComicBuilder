@@ -42,10 +42,12 @@ Each must be a SELF-SUFFICIENT image generation prompt containing:
 - The composition must work as a standalone frame
 
 === motionScript requirements ===
-- Describe the COMPLETE action arc from startFrame to endFrame
-- Include: character movements, gesture changes, expression transitions, any environmental changes
+- Write as TIME-SEGMENTED narrative using the format: "0-Xs：action. Xs-Ys：action. Ys-{duration}s：action."
+- Divide the shot duration into 2-4 meaningful sub-segments based on the action rhythm
+- Each segment describes: environment changes, character movement/expression, and camera movement woven together as a single flowing sentence
 - Describe HOW characters move (slowly, suddenly, hesitantly), not just WHERE they end up
-- Include emotional progression if relevant
+- Include emotional progression within the time flow
+- Example for a 8s shot: "0-3s：少年握住剑柄，符文骤然亮起金色，嗡鸣声从地底传来。3-6s：少年猛然发力拔剑，金白圣光从岩石裂缝迸射而出，镜头贴地向上推进。6-8s：古剑完全出鞘，光芒冲天驱散乌云，少年缓缓抬头，眼中映出金色天空。"
 
 === sceneDescription requirements ===
 - Shared environment context for both frames
