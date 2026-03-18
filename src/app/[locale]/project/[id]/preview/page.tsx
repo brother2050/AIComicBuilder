@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams, useParams } from "next/navigation";
 import { useProjectStore } from "@/stores/project-store";
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
@@ -21,12 +22,35 @@ import { toast } from "sonner";
 export default function PreviewPage() {
   const t = useTranslations();
   const { project, fetchProject } = useProjectStore();
+  const searchParams = useSearchParams();
+  const params = useParams<{ id: string }>();
+  const versionId = searchParams.get("versionId");
+
+  useEffect(() => {
+    if (versionId && params?.id) {
+      fetchProject(params.id, versionId);
+    }
+  }, [versionId, params?.id, fetchProject]);
+
   const [assembling, setAssembling] = useState(false);
   const [selectedShot, setSelectedShot] = useState(0);
   const [videoValid, setVideoValid] = useState<boolean | null>(null);
   const checkedUrl = useRef<string | null>(null);
 
   const finalVideoUrl = project?.finalVideoUrl ?? null;
+  const generationMode = project?.generationMode ?? "keyframe";
+
+  // Which mode's videos to preview — default to the project's generationMode
+  const hasKeyframeVideos = project?.shots.some((s) => s.videoUrl) ?? false;
+  const hasReferenceVideos = project?.shots.some((s) => s.referenceVideoUrl) ?? false;
+  const hasBothModes = hasKeyframeVideos && hasReferenceVideos;
+
+  const [previewMode, setPreviewMode] = useState<"keyframe" | "reference">(generationMode);
+
+  // Sync previewMode when project loads
+  useEffect(() => {
+    if (project) setPreviewMode(project.generationMode ?? "keyframe");
+  }, [project?.generationMode]);
 
   // Check if final video file actually exists
   useEffect(() => {
@@ -40,8 +64,14 @@ export default function PreviewPage() {
 
   if (!project) return null;
 
-  const shotsWithVideo = project.shots.filter((s) => s.videoUrl);
-  const allShotsHaveVideo = project.shots.every((s) => s.videoUrl);
+  const getVideoUrl = (shot: typeof project.shots[0]) =>
+    previewMode === "reference" ? shot.referenceVideoUrl : shot.videoUrl;
+
+  const getThumbnail = (shot: typeof project.shots[0]) =>
+    previewMode === "reference" ? shot.sceneRefFrame : shot.firstFrame;
+
+  const shotsWithVideo = project.shots.filter((s) => getVideoUrl(s));
+  const allShotsHaveVideo = project.shots.length > 0 && project.shots.every((s) => getVideoUrl(s));
   const completedVideos = shotsWithVideo.length;
   const currentShot = shotsWithVideo[selectedShot];
   const hasValidVideo = finalVideoUrl && videoValid === true;
@@ -49,7 +79,7 @@ export default function PreviewPage() {
   async function handleAssemble() {
     if (!project) return;
     setAssembling(true);
-    checkedUrl.current = null; // reset so next check re-validates
+    checkedUrl.current = null;
     try {
       const res = await apiFetch(`/api/projects/${project.id}/generate`, {
         method: "POST",
@@ -71,6 +101,11 @@ export default function PreviewPage() {
     a.href = uploadUrl(finalVideoUrl!);
     a.download = `${project!.title || "video"}-final.mp4`;
     a.click();
+  }
+
+  function handleModeSwitch(mode: "keyframe" | "reference") {
+    setPreviewMode(mode);
+    setSelectedShot(0);
   }
 
   return (
@@ -115,6 +150,34 @@ export default function PreviewPage() {
         </div>
       </div>
 
+      {/* Mode switcher — only shown when both modes have videos */}
+      {hasBothModes && (
+        <div className="flex items-center gap-1 rounded-xl bg-[--surface] p-1 w-fit">
+          <button
+            onClick={() => handleModeSwitch("keyframe")}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
+              previewMode === "keyframe"
+                ? "bg-white text-[--text-primary] shadow-sm"
+                : "text-[--text-muted] hover:text-[--text-secondary]"
+            )}
+          >
+            {t("project.generationModeKeyframe")}
+          </button>
+          <button
+            onClick={() => handleModeSwitch("reference")}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
+              previewMode === "reference"
+                ? "bg-white text-[--text-primary] shadow-sm"
+                : "text-[--text-muted] hover:text-[--text-secondary]"
+            )}
+          >
+            {t("project.generationModeReference")}
+          </button>
+        </div>
+      )}
+
       {/* Final video player */}
       {hasValidVideo && (
         <div className="space-y-3">
@@ -139,11 +202,11 @@ export default function PreviewPage() {
         <div className="space-y-4">
           <div className="overflow-hidden rounded-2xl border border-[--border-subtle] bg-black shadow-2xl shadow-black/40">
             <video
-              key={currentShot.id}
+              key={currentShot.id + previewMode}
               controls
               autoPlay={!hasValidVideo}
               className="aspect-video w-full"
-              src={uploadUrl(currentShot.videoUrl!)}
+              src={uploadUrl(getVideoUrl(currentShot)!)}
             />
           </div>
 
@@ -172,35 +235,38 @@ export default function PreviewPage() {
 
           {/* Thumbnail timeline */}
           <div className="flex gap-2 overflow-x-auto pb-2">
-            {shotsWithVideo.map((shot, i) => (
-              <button
-                key={shot.id}
-                onClick={() => setSelectedShot(i)}
-                className={cn(
-                  "flex-shrink-0 overflow-hidden rounded-xl border-2 transition-all duration-200",
-                  i === selectedShot
-                    ? "border-primary shadow-lg shadow-primary/20 scale-[1.03]"
-                    : "border-[--border-subtle] hover:border-[--border-hover] opacity-70 hover:opacity-100"
-                )}
-              >
-                <div className="relative h-14 w-22">
-                  {shot.firstFrame ? (
-                    <img
-                      src={uploadUrl(shot.firstFrame)}
-                      alt={`Shot ${shot.sequence}`}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-[--surface]">
-                      <Play className="h-3 w-3 text-[--text-muted]" />
-                    </div>
+            {shotsWithVideo.map((shot, i) => {
+              const thumb = getThumbnail(shot);
+              return (
+                <button
+                  key={shot.id}
+                  onClick={() => setSelectedShot(i)}
+                  className={cn(
+                    "flex-shrink-0 overflow-hidden rounded-xl border-2 transition-all duration-200",
+                    i === selectedShot
+                      ? "border-primary shadow-lg shadow-primary/20 scale-[1.03]"
+                      : "border-[--border-subtle] hover:border-[--border-hover] opacity-70 hover:opacity-100"
                   )}
-                  <span className="absolute bottom-1 left-1 rounded-md bg-black/70 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white backdrop-blur-sm">
-                    {shot.sequence}
-                  </span>
-                </div>
-              </button>
-            ))}
+                >
+                  <div className="relative h-14 w-22">
+                    {thumb ? (
+                      <img
+                        src={uploadUrl(thumb)}
+                        alt={`Shot ${shot.sequence}`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-[--surface]">
+                        <Play className="h-3 w-3 text-[--text-muted]" />
+                      </div>
+                    )}
+                    <span className="absolute bottom-1 left-1 rounded-md bg-black/70 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white backdrop-blur-sm">
+                      {shot.sequence}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : (
