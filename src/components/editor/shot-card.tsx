@@ -517,49 +517,64 @@ export function ShotCard({
           state={textState}
           defaultOpen={false}
         >
-          <div className="space-y-2">
-            <Textarea
-              value={editPrompt}
-              onChange={(e) => setEditPrompt(e.target.value)}
-              onBlur={() => patchShot({ prompt: editPrompt })}
-              rows={2}
-              placeholder={t("shot.prompt")}
-            />
+          <div className="space-y-2.5">
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[--text-muted]">{t("shot.sceneDescription")}</p>
+              <Textarea
+                value={editPrompt}
+                onChange={(e) => setEditPrompt(e.target.value)}
+                onBlur={() => patchShot({ prompt: editPrompt })}
+                rows={2}
+                placeholder={t("shot.prompt")}
+              />
+            </div>
             {generationMode !== "reference" && (
               <>
-                <Textarea
-                  value={editStartFrame}
-                  onChange={(e) => setEditStartFrame(e.target.value)}
-                  onBlur={() => patchShot({ startFrameDesc: editStartFrame })}
-                  rows={2}
-                  placeholder={t("shot.startFrame")}
-                  className="border-blue-200 bg-blue-50/30 text-sm"
-                />
-                <Textarea
-                  value={editEndFrame}
-                  onChange={(e) => setEditEndFrame(e.target.value)}
-                  onBlur={() => patchShot({ endFrameDesc: editEndFrame })}
-                  rows={2}
-                  placeholder={t("shot.endFrame")}
-                  className="border-amber-200 bg-amber-50/30 text-sm"
-                />
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-blue-500">{t("shot.startFrame")}</p>
+                  <Textarea
+                    value={editStartFrame}
+                    onChange={(e) => setEditStartFrame(e.target.value)}
+                    onBlur={() => patchShot({ startFrameDesc: editStartFrame })}
+                    rows={2}
+                    placeholder={t("shot.startFrame")}
+                    className="border-blue-200 bg-blue-50/30 text-sm"
+                  />
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-500">{t("shot.endFrame")}</p>
+                  <Textarea
+                    value={editEndFrame}
+                    onChange={(e) => setEditEndFrame(e.target.value)}
+                    onBlur={() => patchShot({ endFrameDesc: editEndFrame })}
+                    rows={2}
+                    placeholder={t("shot.endFrame")}
+                    className="border-amber-200 bg-amber-50/30 text-sm"
+                  />
+                </div>
               </>
             )}
-            <Textarea
-              value={editMotionScript}
-              onChange={(e) => setEditMotionScript(e.target.value)}
-              onBlur={() => patchShot({ motionScript: editMotionScript })}
-              rows={2}
-              placeholder={t("shot.motionScript")}
-              className="border-emerald-200 bg-emerald-50/30 text-sm"
-            />
-            <input
-              value={editCameraDirection}
-              onChange={(e) => setEditCameraDirection(e.target.value)}
-              onBlur={() => patchShot({ cameraDirection: editCameraDirection })}
-              className="w-full rounded-xl border border-[--border-subtle] bg-white px-3 py-2 text-sm outline-none focus:border-primary/50"
-              placeholder="static / pan-left / zoom-in ..."
-            />
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-600">{t("shot.motionScript")}</p>
+              <Textarea
+                value={editMotionScript}
+                onChange={(e) => setEditMotionScript(e.target.value)}
+                onBlur={() => patchShot({ motionScript: editMotionScript })}
+                rows={2}
+                placeholder={t("shot.motionScript")}
+                className="border-emerald-200 bg-emerald-50/30 text-sm"
+              />
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[--text-muted]">{t("shot.cameraDirection")}</p>
+              <input
+                value={editCameraDirection}
+                onChange={(e) => setEditCameraDirection(e.target.value)}
+                onBlur={() => patchShot({ cameraDirection: editCameraDirection })}
+                className="w-full rounded-xl border border-[--border-subtle] bg-white px-3 py-2 text-sm outline-none focus:border-primary/50"
+                placeholder="static / pan-left / zoom-in ..."
+              />
+            </div>
             <Button
               size="xs"
               variant="outline"
