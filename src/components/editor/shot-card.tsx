@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslations } from "next-intl";
@@ -24,7 +24,8 @@ import {
   CheckCircle2,
   Circle,
   XCircle,
-  FileText,
+  Upload,
+  Trash2,
 } from "lucide-react";
 
 interface Dialogue {
@@ -181,7 +182,9 @@ export function ShotCard({
   // UI state
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const uploadFieldRef = useRef<string | null>(null);
 
   const imageGuard = useModelGuard("image");
   const videoGuard = useModelGuard("video");
@@ -313,6 +316,38 @@ export function ShotCard({
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
     }
     setRewritingText(false);
+  }
+
+  async function handleClearFrame(field: "firstFrame" | "lastFrame" | "sceneRefFrame") {
+    await patchShot({ [field]: null });
+    onUpdate();
+  }
+
+  function handleUploadFrame(field: "firstFrame" | "lastFrame" | "sceneRefFrame") {
+    uploadFieldRef.current = field;
+    uploadInputRef.current?.click();
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const field = uploadFieldRef.current;
+    if (!file || !field) return;
+    e.target.value = "";
+    setUploadingField(field);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("field", field);
+      const res = await apiFetch(`/api/projects/${projectId}/shots/${id}/upload`, {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      onUpdate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
+    }
+    setUploadingField(null);
   }
 
   function handleCopyPrompt() {
@@ -476,23 +511,65 @@ export function ShotCard({
       {/* ── Pipeline Steps ── */}
       <div className="space-y-2 border-t border-[--border-subtle] px-4 pb-3 pt-3">
 
-        {/* Step 1: 文本 */}
+        {/* Step 1: 分镜描述 */}
         <StepRow
-          label={t("shot.stepText")}
+          label={t("shot.stepDesc")}
           state={textState}
           defaultOpen={false}
         >
-          {/* Summary */}
-          {prompt && <p className="mb-2 text-xs text-[--text-secondary] line-clamp-2">{prompt}</p>}
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={handleRewriteText}
-            disabled={rewritingText}
-          >
-            {rewritingText ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-            {rewritingText ? t("common.generating") : t("shot.rewriteText")}
-          </Button>
+          <div className="space-y-2">
+            <Textarea
+              value={editPrompt}
+              onChange={(e) => setEditPrompt(e.target.value)}
+              onBlur={() => patchShot({ prompt: editPrompt })}
+              rows={2}
+              placeholder={t("shot.prompt")}
+            />
+            {generationMode !== "reference" && (
+              <>
+                <Textarea
+                  value={editStartFrame}
+                  onChange={(e) => setEditStartFrame(e.target.value)}
+                  onBlur={() => patchShot({ startFrameDesc: editStartFrame })}
+                  rows={2}
+                  placeholder={t("shot.startFrame")}
+                  className="border-blue-200 bg-blue-50/30 text-sm"
+                />
+                <Textarea
+                  value={editEndFrame}
+                  onChange={(e) => setEditEndFrame(e.target.value)}
+                  onBlur={() => patchShot({ endFrameDesc: editEndFrame })}
+                  rows={2}
+                  placeholder={t("shot.endFrame")}
+                  className="border-amber-200 bg-amber-50/30 text-sm"
+                />
+              </>
+            )}
+            <Textarea
+              value={editMotionScript}
+              onChange={(e) => setEditMotionScript(e.target.value)}
+              onBlur={() => patchShot({ motionScript: editMotionScript })}
+              rows={2}
+              placeholder={t("shot.motionScript")}
+              className="border-emerald-200 bg-emerald-50/30 text-sm"
+            />
+            <input
+              value={editCameraDirection}
+              onChange={(e) => setEditCameraDirection(e.target.value)}
+              onBlur={() => patchShot({ cameraDirection: editCameraDirection })}
+              className="w-full rounded-xl border border-[--border-subtle] bg-white px-3 py-2 text-sm outline-none focus:border-primary/50"
+              placeholder="static / pan-left / zoom-in ..."
+            />
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={handleRewriteText}
+              disabled={rewritingText}
+            >
+              {rewritingText ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              {rewritingText ? t("common.generating") : t("shot.rewriteText")}
+            </Button>
+          </div>
         </StepRow>
 
         {/* Step 2: 帧 */}
@@ -502,23 +579,48 @@ export function ShotCard({
           isNext={nextStep === "frame"}
         >
           {/* Frame thumbnails */}
-          {hasFrame && (
-            <div className="mb-2.5 flex gap-2">
-              {frameAssets.map((asset, i) => (
-                <div
-                  key={i}
-                  className={`overflow-hidden rounded-lg border border-[--border-subtle] bg-[--surface] ${asset.src ? "cursor-pointer hover:opacity-80 transition-opacity" : "flex h-16 items-center justify-center"}`}
-                  style={{ width: generationMode === "reference" ? "100%" : "50%" }}
-                  onClick={() => asset.src && setPreviewSrc(uploadUrl(asset.src))}
-                >
-                  {asset.src
-                    ? <img src={uploadUrl(asset.src)} className="w-full object-contain" />
-                    : <ImageIcon className="h-4 w-4 text-[--text-muted]" />
-                  }
+          <div className="mb-2.5 flex gap-2">
+            {frameAssets.map((asset, i) => {
+              const fieldName = generationMode === "reference"
+                ? "sceneRefFrame" as const
+                : (i === 0 ? "firstFrame" : "lastFrame") as "firstFrame" | "lastFrame";
+              const isUploading = uploadingField === fieldName;
+              return (
+                <div key={i} className="flex flex-col gap-1" style={{ width: generationMode === "reference" ? "100%" : "50%" }}>
+                  <div
+                    className={`relative overflow-hidden rounded-lg border border-[--border-subtle] bg-[--surface] ${asset.src && !isUploading ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
+                    onClick={() => asset.src && !isUploading && setPreviewSrc(uploadUrl(asset.src))}
+                  >
+                    {isUploading ? (
+                      <div className="flex h-16 items-center justify-center"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
+                    ) : asset.src ? (
+                      <img src={uploadUrl(asset.src)} className="w-full object-contain" />
+                    ) : (
+                      <div className="flex h-16 items-center justify-center"><ImageIcon className="h-4 w-4 text-[--text-muted]" /></div>
+                    )}
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleUploadFrame(fieldName)}
+                      disabled={isUploading}
+                      className="flex flex-1 items-center justify-center gap-1 rounded-md border border-[--border-subtle] bg-white py-0.5 text-[10px] text-[--text-muted] transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-40"
+                    >
+                      <Upload className="h-2.5 w-2.5" />
+                      上传
+                    </button>
+                    {asset.src && (
+                      <button
+                        onClick={() => handleClearFrame(fieldName)}
+                        className="flex items-center justify-center rounded-md border border-[--border-subtle] bg-white px-1.5 py-0.5 text-[10px] text-[--text-muted] transition-colors hover:border-red-300 hover:text-red-500"
+                      >
+                        <Trash2 className="h-2.5 w-2.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
           <Button
             size="xs"
             variant={nextStep === "frame" ? "default" : "outline"}
@@ -543,9 +645,12 @@ export function ShotCard({
           isNext={nextStep === "prompt"}
         >
           {hasVideoPrompt && (
-            <p className="mb-2 text-xs text-[--text-secondary] line-clamp-3 font-mono leading-relaxed">
-              {videoPrompt}
-            </p>
+            <Textarea
+              value={editVideoPrompt}
+              onChange={(e) => setEditVideoPrompt(e.target.value)}
+              onBlur={() => patchShot({ videoPrompt: editVideoPrompt })}
+              className="mb-2 min-h-[5rem] resize-none font-mono text-xs leading-relaxed"
+            />
           )}
           <Button
             size="xs"
@@ -592,105 +697,16 @@ export function ShotCard({
           </Button>
         </StepRow>
 
-        {/* Collapsible edit section */}
-        <div className="pt-1">
-          <button
-            className="flex w-full items-center gap-1.5 text-[11px] text-[--text-muted] hover:text-[--text-secondary] transition-colors"
-            onClick={() => setEditOpen((o) => !o)}
-          >
-            <FileText className="h-3 w-3" />
-            {t("shot.editDetails")}
-            {editOpen ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
-          </button>
-
-          {editOpen && (
-            <div className="mt-2 space-y-3">
-              <div>
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[--text-muted]">{t("shot.sceneDescription")}</p>
-                <Textarea
-                  value={editPrompt}
-                  onChange={(e) => setEditPrompt(e.target.value)}
-                  onBlur={() => patchShot({ prompt: editPrompt })}
-                  rows={2}
-                  placeholder={t("shot.prompt")}
-                />
-              </div>
-
-              {generationMode !== "reference" && (
-                <>
-                  <div className="rounded-xl bg-blue-50/50 p-3">
-                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-blue-600">{t("shot.startFrame")}</p>
-                    <Textarea
-                      value={editStartFrame}
-                      onChange={(e) => setEditStartFrame(e.target.value)}
-                      onBlur={() => patchShot({ startFrameDesc: editStartFrame })}
-                      rows={2}
-                      className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
-                    />
-                  </div>
-                  <div className="rounded-xl bg-amber-50/50 p-3">
-                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-600">{t("shot.endFrame")}</p>
-                    <Textarea
-                      value={editEndFrame}
-                      onChange={(e) => setEditEndFrame(e.target.value)}
-                      onBlur={() => patchShot({ endFrameDesc: editEndFrame })}
-                      rows={2}
-                      className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
-                    />
-                  </div>
-                </>
-              )}
-
-              <div className="rounded-xl bg-emerald-50/50 p-3">
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-600">{t("shot.motionScript")}</p>
-                <Textarea
-                  value={editMotionScript}
-                  onChange={(e) => setEditMotionScript(e.target.value)}
-                  onBlur={() => patchShot({ motionScript: editMotionScript })}
-                  rows={2}
-                  className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
-                />
-              </div>
-
-              <div>
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[--text-muted]">{t("shot.cameraDirection")}</p>
-                <input
-                  value={editCameraDirection}
-                  onChange={(e) => setEditCameraDirection(e.target.value)}
-                  onBlur={() => patchShot({ cameraDirection: editCameraDirection })}
-                  className="w-full rounded-xl border border-[--border-subtle] bg-white px-3 py-2 text-sm outline-none focus:border-primary/50"
-                  placeholder="static / pan-left / zoom-in ..."
-                />
-              </div>
-
-              {dialogues.length > 0 && (
-                <div className="space-y-1.5 rounded-xl bg-[--surface] p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[--text-muted]">{t("shot.dialogue")}</p>
-                  {dialogues.map((d) => (
-                    <p key={d.id} className="text-sm">
-                      <span className="font-semibold text-primary">{d.characterName}</span>
-                      <span className="mx-1.5 text-[--text-muted]">&mdash;</span>
-                      <span className="text-[--text-secondary]">{d.text}</span>
-                    </p>
-                  ))}
-                </div>
-              )}
-
-              {hasVideoPrompt && (
-                <div className="rounded-xl bg-purple-50/60 p-3">
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-purple-600">{t("shot.videoPrompt")}</p>
-                  <Textarea
-                    value={editVideoPrompt}
-                    onChange={(e) => setEditVideoPrompt(e.target.value)}
-                    onBlur={() => patchShot({ videoPrompt: editVideoPrompt })}
-                    className="rounded-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0 min-h-[6rem] max-h-48 resize-none overflow-y-auto"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
       </div>
+
+      {/* Hidden file input for frame uploads */}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
       {/* Preview lightbox */}
       {previewSrc && (

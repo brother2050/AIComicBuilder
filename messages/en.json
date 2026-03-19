@@ -112,6 +112,7 @@
     "videoPrompt": "Video Prompt",
     "noShots": "No shots yet. Generate shots from the script first.",
     "stepText": "Scene Text",
+    "stepDesc": "Shot Description",
     "stepFrames": "Keyframes",
     "stepSceneFrame": "Scene Ref Frame",
     "stepVideoPrompt": "Video Prompt",

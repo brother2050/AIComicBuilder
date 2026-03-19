@@ -112,6 +112,7 @@
     "videoPrompt": "動画プロンプト",
     "noShots": "まだショットがありません。先に脚本からショットを生成してください。",
     "stepText": "シーンテキスト",
+    "stepDesc": "ショット説明",
     "stepFrames": "キーフレーム",
     "stepSceneFrame": "シーン参照フレーム",
     "stepVideoPrompt": "動画プロンプト",

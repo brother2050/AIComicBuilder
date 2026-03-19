@@ -112,6 +112,7 @@
     "videoPrompt": "视频提示词",
     "noShots": "还没有分镜，先生成分镜",
     "stepText": "分镜文本",
+    "stepDesc": "分镜描述",
     "stepFrames": "首尾帧",
     "stepSceneFrame": "场景参考帧",
     "stepVideoPrompt": "视频提示词",
