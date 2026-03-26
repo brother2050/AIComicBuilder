@@ -3,6 +3,7 @@
     "appName": "AI コミックビルダー",
     "create": "作成",
     "save": "保存",
+    "saving": "保存中...",
     "delete": "削除",
     "cancel": "キャンセル",
     "confirm": "確認",

@@ -3,6 +3,7 @@
     "appName": "AI 코믹 빌더",
     "create": "만들기",
     "save": "저장",
+    "saving": "저장 중...",
     "delete": "삭제",
     "cancel": "취소",
     "confirm": "확인",

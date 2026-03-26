@@ -3,6 +3,7 @@
     "appName": "AI 漫剧生成器",
     "create": "创建",
     "save": "保存",
+    "saving": "保存中...",
     "delete": "删除",
     "cancel": "取消",
     "confirm": "确认",
