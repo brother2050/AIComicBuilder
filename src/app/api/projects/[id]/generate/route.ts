@@ -2083,12 +2083,27 @@ async function handleSingleVideoPrompt(
   const [shot] = await db.select().from(shots).where(eq(shots.id, shotId)).limit(1);
   if (!shot) return NextResponse.json({ error: "Shot not found" }, { status: 404 });
 
-  // Collect first + last frames for vision (both needed for transition prompt)
+  // Determine generation mode to decide which frames to pass
+  let genMode = "keyframe";
+  if (shot.episodeId) {
+    const [ep] = await db.select({ generationMode: episodes.generationMode }).from(episodes).where(eq(episodes.id, shot.episodeId));
+    genMode = ep?.generationMode ?? "keyframe";
+  } else {
+    const [proj] = await db.select({ generationMode: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
+    genMode = proj?.generationMode ?? "keyframe";
+  }
+
+  // Keyframe mode: pass first + last frames for transition description
+  // Reference mode: pass only the scene reference frame
   const visionFrames: string[] = [];
-  if (shot.firstFrame) visionFrames.push(shot.firstFrame);
-  if (shot.lastFrame) visionFrames.push(shot.lastFrame);
-  if (visionFrames.length === 0 && shot.sceneRefFrame) visionFrames.push(shot.sceneRefFrame);
-  console.log(`[SingleVideoPrompt] shot.sequence=${shot.sequence}, frames=${visionFrames.length} (first=${!!shot.firstFrame}, last=${!!shot.lastFrame}, sceneRef=${!!shot.sceneRefFrame})`);
+  if (genMode === "reference") {
+    if (shot.sceneRefFrame) visionFrames.push(shot.sceneRefFrame);
+  } else {
+    if (shot.firstFrame) visionFrames.push(shot.firstFrame);
+    if (shot.lastFrame) visionFrames.push(shot.lastFrame);
+    if (visionFrames.length === 0 && shot.sceneRefFrame) visionFrames.push(shot.sceneRefFrame);
+  }
+  console.log(`[SingleVideoPrompt] shot.sequence=${shot.sequence}, mode=${genMode}, frames=${visionFrames.length}`);
   if (visionFrames.length === 0) {
     return NextResponse.json({ error: "No frame available. Generate frames first." }, { status: 400 });
   }
@@ -2167,11 +2182,21 @@ async function handleBatchVideoPrompt(
   // Only process shots that have frames
   const eligible = batchShots.filter((s) => s.firstFrame || s.lastFrame || s.sceneRefFrame);
 
+  // Determine generation mode for frame selection
+  let batchGenMode = "keyframe";
+  if (episodeId) {
+    const [ep] = await db.select({ generationMode: episodes.generationMode }).from(episodes).where(eq(episodes.id, episodeId));
+    batchGenMode = ep?.generationMode ?? "keyframe";
+  } else {
+    const [proj] = await db.select({ generationMode: projects.generationMode }).from(projects).where(eq(projects.id, projectId));
+    batchGenMode = proj?.generationMode ?? "keyframe";
+  }
+
   const textProvider = resolveAIProvider(modelConfig);
   const refVideoSystem = await resolvePrompt("ref_video_prompt", { userId, projectId });
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
 
-  console.log(`[BatchVideoPrompt] Processing ${eligible.length} shots (${batchShots.length} total, ${batchCharacters.length} chars)`);
+  console.log(`[BatchVideoPrompt] Processing ${eligible.length} shots (${batchShots.length} total, ${batchCharacters.length} chars, mode=${batchGenMode})`);
   const bvpStartTime = Date.now();
 
   const results = await Promise.all(
@@ -2179,12 +2204,15 @@ async function handleBatchVideoPrompt(
       try {
         const shotStart = Date.now();
         const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
-        // Collect frames for vision: first frame + last frame (both needed for transition)
+        // Keyframe: pass first + last frames; Reference: pass only scene ref frame
         const visionFrames: string[] = [];
-        if (shot.firstFrame) visionFrames.push(shot.firstFrame);
-        if (shot.lastFrame) visionFrames.push(shot.lastFrame);
-        // Fallback to scene ref frame if no first/last frames
-        if (visionFrames.length === 0 && shot.sceneRefFrame) visionFrames.push(shot.sceneRefFrame);
+        if (batchGenMode === "reference") {
+          if (shot.sceneRefFrame) visionFrames.push(shot.sceneRefFrame);
+        } else {
+          if (shot.firstFrame) visionFrames.push(shot.firstFrame);
+          if (shot.lastFrame) visionFrames.push(shot.lastFrame);
+          if (visionFrames.length === 0 && shot.sceneRefFrame) visionFrames.push(shot.sceneRefFrame);
+        }
         const shotDialogues = await db
           .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
           .from(dialogues)
