@@ -96,6 +96,9 @@ export function ProjectPromptCards({ projectId }: ProjectPromptCardsProps) {
   const [enabled, setEnabled] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
 
+  // Sentinel key used to persist the "enabled" toggle in DB
+  const ENABLED_SENTINEL = "__project_prompts_enabled__";
+
   // Fetch registry + project overrides on mount
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -107,8 +110,15 @@ export function ProjectPromptCards({ projectId }: ProjectPromptCardsProps) {
       const regData: RegistryEntry[] = await regResp.json();
       const overData: ProjectPromptTemplate[] = await overResp.json();
       setRegistry(regData);
-      setOverrides(overData);
-      if (overData.length > 0) {
+      // Separate sentinel record from real overrides
+      const sentinel = overData.find(
+        (o: ProjectPromptTemplate) => o.promptKey === ENABLED_SENTINEL
+      );
+      const realOverrides = overData.filter(
+        (o: ProjectPromptTemplate) => o.promptKey !== ENABLED_SENTINEL
+      );
+      setOverrides(realOverrides);
+      if (sentinel || realOverrides.length > 0) {
         setEnabled(true);
       }
     } catch {
@@ -122,30 +132,44 @@ export function ProjectPromptCards({ projectId }: ProjectPromptCardsProps) {
     loadData();
   }, [loadData]);
 
-  // Toggle: turning off removes all project overrides; turning on just shows the UI
+  // Toggle: persist enabled state via a sentinel record in DB
   const handleToggle = async (value: boolean) => {
     if (value) {
-      setEnabled(true);
-      return;
-    }
-    // Turning off — delete all project overrides
-    if (overrides.length > 0) {
+      // Write sentinel to DB
       try {
-        const promptKeys = [...new Set(overrides.map((o) => o.promptKey))];
-        await Promise.all(
-          promptKeys.map((pk) =>
-            apiFetch(`/api/projects/${projectId}/prompt-templates/${pk}`, {
-              method: "DELETE",
-            })
-          )
+        await apiFetch(
+          `/api/projects/${projectId}/prompt-templates/${ENABLED_SENTINEL}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: "full", content: "1" }),
+          }
         );
-        setOverrides([]);
-        toast.success(t("editor.resetSuccess"));
+        setEnabled(true);
       } catch {
         toast.error(t("editor.save") + " failed");
       }
+      return;
     }
-    setEnabled(false);
+    // Turning off — delete all project overrides + sentinel
+    try {
+      const promptKeys = [
+        ...new Set(overrides.map((o) => o.promptKey)),
+        ENABLED_SENTINEL,
+      ];
+      await Promise.all(
+        promptKeys.map((pk) =>
+          apiFetch(`/api/projects/${projectId}/prompt-templates/${pk}`, {
+            method: "DELETE",
+          })
+        )
+      );
+      setOverrides([]);
+      setEnabled(false);
+      toast.success(t("editor.resetSuccess"));
+    } catch {
+      toast.error(t("editor.save") + " failed");
+    }
   };
 
   // Compute per-prompt stats
