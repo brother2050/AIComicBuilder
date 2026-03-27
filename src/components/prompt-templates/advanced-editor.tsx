@@ -129,7 +129,7 @@ export function AdvancedEditor() {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-3 p-3">
+    <div className="flex flex-1 flex-col gap-3 overflow-hidden p-3">
       {/* Warning banner */}
       {showWarnings && warnings.length > 0 && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
@@ -188,10 +188,10 @@ export function AdvancedEditor() {
         </div>
       </div>
 
-      <Textarea
+      <textarea
         value={fullTextContent}
         onChange={(e) => setFullTextContent(e.target.value)}
-        className="min-h-[400px] flex-1 font-mono text-[11px] leading-relaxed"
+        className="flex-1 resize-none overflow-y-auto rounded-xl border border-[--border-subtle] bg-white px-3.5 py-3 font-mono text-[11px] leading-relaxed text-[--text-primary] outline-none transition-all duration-200 placeholder:text-[--text-muted] hover:border-[--border-hover] focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15"
         placeholder={t("editor.advancedMode")}
       />
     </div>
