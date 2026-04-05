@@ -1,8 +1,9 @@
 import path from "path";
 import { db } from "@/lib/db";
 import { shots, characters, storyboardVersions } from "@/lib/db/schema";
-import { resolveVideoProvider } from "@/lib/ai/provider-factory";
+import { resolveVideoProvider, resolveAIProvider } from "@/lib/ai/provider-factory";
 import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
+import { checkVideoQuality } from "./video-quality-check";
 import { buildVideoPrompt } from "@/lib/ai/prompts/video-generate";
 import { resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { getModelMaxDuration } from "@/lib/ai/model-limits";
@@ -76,6 +77,34 @@ export async function handleVideoGenerate(task: Task) {
     .update(shots)
     .set({ videoUrl: result.filePath, status: "completed" })
     .where(eq(shots.id, payload.shotId));
+
+  // Best-effort video quality check — does not block or fail generation
+  try {
+    const textProvider = resolveAIProvider(payload.modelConfig);
+    if (textProvider) {
+      const qualityResult = await checkVideoQuality(
+        textProvider,
+        result.filePath,
+        shot.firstFrame || undefined
+      );
+
+      console.log(
+        `[VideoQuality] Shot ${payload.shotId}: score=${qualityResult.score}, pass=${qualityResult.pass}`
+      );
+
+      if (!qualityResult.pass) {
+        console.warn(`[VideoQuality] Issues: ${qualityResult.issues.join(", ")}`);
+      }
+
+      return {
+        videoPath: result.filePath,
+        qualityScore: qualityResult.score,
+        qualityIssues: qualityResult.issues,
+      };
+    }
+  } catch (e) {
+    console.warn("[VideoQuality] Quality check skipped:", e);
+  }
 
   return { videoPath: result.filePath };
 }
