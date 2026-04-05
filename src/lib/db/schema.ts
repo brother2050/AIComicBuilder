@@ -110,6 +110,8 @@ export const shots = sqliteTable("shots", {
   sceneRefFrame: text("scene_ref_frame"),
   videoScript: text("video_script"),
   videoPrompt: text("video_prompt"),
+  transitionIn: text("transition_in").default("cut"),
+  transitionOut: text("transition_out").default("cut"),
   episodeId: text("episode_id").references(() => episodes.id, {
     onDelete: "cascade",
   }),
@@ -134,6 +136,8 @@ export const dialogues = sqliteTable("dialogues", {
   text: text("text").notNull(),
   audioUrl: text("audio_url"),
   sequence: integer("sequence").notNull().default(0),
+  startRatio: text("start_ratio").default("0"),
+  endRatio: text("end_ratio").default("1"),
 });
 
 export const importLogs = sqliteTable("import_logs", {
