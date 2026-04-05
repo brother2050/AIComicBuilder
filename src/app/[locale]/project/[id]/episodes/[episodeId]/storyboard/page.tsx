@@ -6,7 +6,7 @@ import { useModelStore } from "@/stores/model-store";
 import { ShotCard } from "@/components/editor/shot-card";
 import { Button } from "@/components/ui/button";
 import { useTranslations, useLocale } from "next-intl";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import type { StoryboardVersion } from "@/stores/project-store";
 import { useModelGuard } from "@/hooks/use-model-guard";
 import {
@@ -101,6 +101,31 @@ export default function EpisodeStoryboardPage() {
       return current;
     });
   }, [project?.versions]);
+
+  const sceneGroups = useMemo(() => {
+    if (!project) return { groups: [], ungrouped: [] };
+
+    const groupMap = new Map<string, { sceneId: string; shots: typeof project.shots }>();
+    const ungrouped: typeof project.shots = [];
+
+    for (const shot of project.shots) {
+      if (shot.sceneId) {
+        const existing = groupMap.get(shot.sceneId);
+        if (existing) {
+          existing.shots.push(shot);
+        } else {
+          groupMap.set(shot.sceneId, { sceneId: shot.sceneId, shots: [shot] });
+        }
+      } else {
+        ungrouped.push(shot);
+      }
+    }
+
+    return {
+      groups: Array.from(groupMap.values()),
+      ungrouped,
+    };
+  }, [project?.shots]);
 
   if (!project) return null;
 
@@ -914,8 +939,8 @@ export default function EpisodeStoryboardPage() {
           generatingVideos={generatingVideos}
         />
       ) : (
-        <div className="space-y-3">
-          {project.shots.map((shot) => (
+        (() => {
+          const renderShotCard = (shot: typeof project.shots[number]) => (
             <ShotCard
               key={shot.id}
               id={shot.id}
@@ -932,6 +957,9 @@ export default function EpisodeStoryboardPage() {
               lastFrame={shot.lastFrame}
               sceneRefFrame={shot.sceneRefFrame}
               videoPrompt={shot.videoPrompt}
+              transitionIn={shot.transitionIn}
+              transitionOut={shot.transitionOut}
+              compositionGuide={shot.compositionGuide}
               videoUrl={generationMode === "reference" ? shot.referenceVideoUrl : shot.videoUrl}
               status={
                 generationMode === "reference"
@@ -952,8 +980,43 @@ export default function EpisodeStoryboardPage() {
               batchGeneratingVideoPrompts={generatingVideoPrompts}
               batchGeneratingVideos={generatingVideos}
             />
-          ))}
-        </div>
+          );
+
+          return sceneGroups.groups.length > 0 ? (
+            <div className="space-y-6">
+              {sceneGroups.groups.map((group, groupIndex) => (
+                <div key={group.sceneId} className="space-y-3">
+                  {/* Scene header */}
+                  <div className="flex items-center gap-2 border-b pb-2 pt-4">
+                    <Film className="h-4 w-4 text-[--text-muted]" />
+                    <h3 className="text-sm font-medium">
+                      Scene {groupIndex + 1}
+                    </h3>
+                    <span className="text-xs text-[--text-muted]">
+                      {group.shots.length} {group.shots.length === 1 ? "shot" : "shots"}
+                    </span>
+                  </div>
+                  {/* Shots in this scene */}
+                  {group.shots.map((shot) => renderShotCard(shot))}
+                </div>
+              ))}
+
+              {/* Ungrouped shots */}
+              {sceneGroups.ungrouped.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 border-b pb-2 pt-4">
+                    <h3 className="text-sm font-medium text-[--text-muted]">Other Shots</h3>
+                  </div>
+                  {sceneGroups.ungrouped.map((shot) => renderShotCard(shot))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {project.shots.map((shot) => renderShotCard(shot))}
+            </div>
+          );
+        })()
       )}
 
       {openDrawerShotId && (

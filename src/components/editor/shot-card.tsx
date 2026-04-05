@@ -51,6 +51,9 @@ interface ShotCardProps {
   videoUrl: string | null;
   sceneRefFrame?: string | null;
   videoPrompt?: string | null;
+  transitionIn?: string;
+  transitionOut?: string;
+  compositionGuide?: string;
   isStale?: boolean;
   status: string;
   dialogues: Dialogue[];
@@ -63,6 +66,16 @@ interface ShotCardProps {
   batchGeneratingVideoPrompts?: boolean;
   batchGeneratingVideos?: boolean;
 }
+
+const TRANSITIONS = [
+  { value: "cut", label: "Cut" },
+  { value: "dissolve", label: "Dissolve" },
+  { value: "fade_in", label: "Fade In" },
+  { value: "fade_out", label: "Fade Out" },
+  { value: "wipeleft", label: "Wipe Left" },
+  { value: "slideright", label: "Slide Right" },
+  { value: "circleopen", label: "Circle Open" },
+];
 
 type StepState = "done" | "generating" | "error" | "idle";
 
@@ -143,6 +156,9 @@ export function ShotCard({
   videoUrl,
   sceneRefFrame,
   videoPrompt,
+  transitionIn,
+  transitionOut,
+  compositionGuide,
   isStale,
   status,
   dialogues,
@@ -503,6 +519,37 @@ export function ShotCard({
                 <div key={i} className={`h-1.5 w-1.5 rounded-full ${done ? "bg-emerald-400" : "bg-[--border-subtle]"}`} />
               ))}
             </div>
+          </div>
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-[--text-muted] shrink-0">Transition:</span>
+              <select
+                value={transitionIn || "cut"}
+                onChange={(e) => { patchShot({ transitionIn: e.target.value }); onUpdate(); }}
+                onClick={(e) => e.stopPropagation()}
+                className="h-7 rounded border border-[--border-subtle] bg-white px-2 text-xs outline-none focus:border-primary/50"
+              >
+                {TRANSITIONS.map((tr) => (
+                  <option key={tr.value} value={tr.value}>{tr.label}</option>
+                ))}
+              </select>
+              <span className="text-[--text-muted]">&rarr;</span>
+              <select
+                value={transitionOut || "cut"}
+                onChange={(e) => { patchShot({ transitionOut: e.target.value }); onUpdate(); }}
+                onClick={(e) => e.stopPropagation()}
+                className="h-7 rounded border border-[--border-subtle] bg-white px-2 text-xs outline-none focus:border-primary/50"
+              >
+                {TRANSITIONS.map((tr) => (
+                  <option key={tr.value} value={tr.value}>{tr.label}</option>
+                ))}
+              </select>
+            </div>
+            {compositionGuide && (
+              <span className="text-xs text-[--text-muted]">
+                {compositionGuide.replace(/_/g, " ")}
+              </span>
+            )}
           </div>
         </div>
 

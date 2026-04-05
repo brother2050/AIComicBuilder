@@ -36,6 +36,8 @@ interface Shot {
   lastFrameUrl: string | null;
   sceneRefFrame: string | null;
   sceneId?: string;
+  transitionIn?: string;
+  transitionOut?: string;
   videoPrompt: string | null;
   compositionGuide?: string;
   qualityScore?: number;
