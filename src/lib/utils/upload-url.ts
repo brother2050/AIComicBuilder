@@ -5,6 +5,12 @@
 export function uploadUrl(filePath: string): string {
   // Normalize backslashes to forward slashes (Windows compatibility)
   const normalized = filePath.replace(/\\/g, "/");
-  // Strip any prefix ending with "uploads/" (handles ./uploads/, /app/uploads/, etc.)
-  return `/api/uploads/${normalized.replace(/^.*uploads\//, "")}`;
+
+  // Already an API URL — return as-is
+  if (normalized.startsWith("/api/uploads/")) return normalized;
+
+  // Strip any prefix ending with "uploads/" (handles ./uploads/, /abs/path/uploads/, etc.)
+  const stripped = normalized.replace(/^.*?uploads\//, "");
+
+  return `/api/uploads/${stripped}`;
 }
