@@ -310,7 +310,16 @@ export function ShotDrawer({
                 rows={2}
                 placeholder={t("shot.prompt")}
               />
-              {generationMode !== "reference" && (
+              {generationMode === "reference" ? (
+                <Textarea
+                  value={editStartFrame}
+                  onChange={(e) => setEditStartFrame(e.target.value)}
+                  onBlur={() => patchShot({ startFrameDesc: editStartFrame })}
+                  rows={2}
+                  placeholder={t("shot.sceneFramePrompt") || "场景帧提示词"}
+                  className="border-violet-200 bg-violet-50/30 text-sm"
+                />
+              ) : (
                 <>
                   <Textarea
                     value={editStartFrame}

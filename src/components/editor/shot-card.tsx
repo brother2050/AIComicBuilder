@@ -689,7 +689,27 @@ export function ShotCard({
                 placeholder={t("shot.prompt")}
               />
             </div>
-            {generationMode !== "reference" && (
+            {generationMode === "reference" ? (
+              <div>
+                <div className="mb-1 flex items-center gap-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-500">{t("shot.sceneFramePrompt") || "场景帧提示词"}</p>
+                  <AiOptimizeButton
+                    value={editStartFrame}
+                    onOptimized={(v) => { setEditStartFrame(v); patchShot({ startFrameDesc: v }); }}
+                    fieldLabel="sceneFramePrompt"
+                    projectId={projectId}
+                  />
+                </div>
+                <Textarea
+                  value={editStartFrame}
+                  onChange={(e) => setEditStartFrame(e.target.value)}
+                  onBlur={() => patchShot({ startFrameDesc: editStartFrame })}
+                  rows={2}
+                  placeholder={t("shot.sceneFramePrompt") || "场景帧提示词"}
+                  className="border-violet-200 bg-violet-50/30 text-sm"
+                />
+              </div>
+            ) : (
               <>
                 <div>
                   <div className="mb-1 flex items-center gap-1">
