@@ -1,0 +1,2 @@
+ALTER TABLE projects ADD COLUMN bgm_url TEXT DEFAULT '';
+ALTER TABLE episodes ADD COLUMN bgm_url TEXT DEFAULT '';

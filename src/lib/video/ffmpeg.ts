@@ -26,6 +26,8 @@ interface AssembleParams {
   transitions?: TransitionType[]; // transition between shot[i] and shot[i+1], length = videoPaths.length - 1
   titleCard?: { text: string; duration: number };
   creditsCard?: { text: string; duration: number };
+  bgmPath?: string;
+  bgmVolume?: number; // 0.0-1.0, default 0.3
 }
 
 interface AssembleResult {
@@ -308,6 +310,38 @@ export async function assembleVideo(params: AssembleParams): Promise<AssembleRes
   } else {
     // No subtitles, just rename
     fs.renameSync(concatOutputPath, outputPath);
+  }
+
+  // Step 3: Mix background music if provided
+  if (params.bgmPath && fs.existsSync(path.resolve(params.bgmPath))) {
+    const bgmOutputPath = outputPath.replace(/\.mp4$/, `-bgm.mp4`);
+    const vol = params.bgmVolume ?? 0.3;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg()
+          .input(outputPath)
+          .input(path.resolve(params.bgmPath!))
+          .outputOptions([
+            "-map", "0:v",
+            "-map", "1:a",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-af", `volume=${vol}`,
+            "-shortest",
+          ])
+          .output(bgmOutputPath)
+          .on("end", () => {
+            fs.unlinkSync(outputPath);
+            fs.renameSync(bgmOutputPath, outputPath);
+            resolve();
+          })
+          .on("error", (err) => reject(err))
+          .run();
+      });
+    } catch (err) {
+      console.warn(`[FFmpeg] BGM mix failed, skipping: ${err}`);
+    }
   }
 
   // Return relative paths for uploadUrl compatibility

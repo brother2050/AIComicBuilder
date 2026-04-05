@@ -18,6 +18,7 @@ export const projects = sqliteTable("projects", {
   colorPalette: text("color_palette").default(""),
   worldSetting: text("world_setting").default(""),
   targetDuration: integer("target_duration").default(0),
+  bgmUrl: text("bgm_url").default(""),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -49,6 +50,7 @@ export const episodes = sqliteTable("episodes", {
   scriptHash: text("script_hash").default(""),
   colorPalette: text("color_palette").default(""),
   targetDuration: integer("target_duration").default(0),
+  bgmUrl: text("bgm_url").default(""),
   finalVideoUrl: text("final_video_url"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
@@ -258,6 +260,49 @@ export const characterCostumes = sqliteTable("character_costumes", {
   name: text("name").notNull().default("default"),
   description: text("description").default(""),
   referenceImage: text("reference_image"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const moodBoardImages = sqliteTable("mood_board_images", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  imageUrl: text("image_url").notNull(),
+  annotation: text("annotation").default(""),
+  extractedStyle: text("extracted_style").default(""),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const shotActions = sqliteTable("shot_actions", {
+  id: text("id").primaryKey(),
+  shotId: text("shot_id")
+    .notNull()
+    .references(() => shots.id, { onDelete: "cascade" }),
+  characterId: text("character_id"),
+  bodyPart: text("body_part").default("full_body"),
+  motion: text("motion").notNull().default(""),
+  startTime: text("start_time").default("0"),
+  endTime: text("end_time").default("0"),
+  intensity: text("intensity").default("normal"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+export const promptAbTests = sqliteTable("prompt_ab_tests", {
+  id: text("id").primaryKey(),
+  promptKey: text("prompt_key").notNull(),
+  variantA: text("variant_a").notNull(),
+  variantB: text("variant_b").notNull(),
+  shotId: text("shot_id"),
+  resultAUrl: text("result_a_url"),
+  resultBUrl: text("result_b_url"),
+  preferred: text("preferred"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
