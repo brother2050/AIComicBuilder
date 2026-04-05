@@ -36,9 +36,16 @@ Output a JSON array:
         "text": "Dialogue line spoken during this shot"
       }
     ],
-    "cameraDirection": "Specific camera movement instruction"
+    "cameraDirection": "Specific camera movement instruction",
+    "transitionIn": "cut",
+    "transitionOut": "cut"
   }
 ]
+
+=== transitionIn & transitionOut ===
+- Values: "cut" | "dissolve" | "fade_in" | "fade_out" | "wipeleft" | "circleopen". Default "cut".
+- "transitionIn": transition type entering this shot.
+- "transitionOut": transition type leaving this shot.
 
 === startFrame & endFrame requirements (CRITICAL — these directly drive image generation) ===
 Each must be a SELF-SUFFICIENT image generation prompt containing:
@@ -118,6 +125,15 @@ Cinematography principles:
 - Duration: ALL shots must be ${minDuration}-${maxDuration}s. Dialogue-heavy = ${Math.min(maxDuration, 12)}-${maxDuration}s; action shots = ${minDuration}-${Math.min(maxDuration, 12)}s; establishing shots = ${minDuration}-${Math.min(maxDuration, 10)}s
 - CONTINUITY: the endFrame of shot N must logically connect to the startFrame of shot N+1 (same characters, consistent environment, natural position transition)
 - COVERAGE: generate AT LEAST one shot per SCENE in the screenplay. Do NOT skip or merge scenes. If a scene is complex, split it into multiple shots. Every scene marker (SCENE N) must produce at least one shot.
+
+## TRANSITION GUIDELINES
+- Scene changes (different location or time jump): use "dissolve"
+- First shot of the entire film: use transitionIn = "fade_in"
+- Last shot of the entire film: use transitionOut = "fade_out"
+- Same scene, continuous action: use "cut" (default)
+- Dramatic time skip or montage: use "wipeleft" or "circleopen"
+- When in doubt, default to "cut"
+- Do NOT overuse fancy transitions — most shots should use "cut"
 
 CRITICAL LANGUAGE RULE: ALL text fields (sceneDescription, startFrame, endFrame, motionScript, dialogues.text, dialogues.character) MUST be in the SAME LANGUAGE as the screenplay. If the screenplay is in Chinese, write ALL fields in Chinese. Only "cameraDirection" uses English (technical terms).
 

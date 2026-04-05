@@ -47,6 +47,8 @@ export async function handleShotSplit(task: Task) {
     prompt: string;
     duration: number;
     dialogues: Array<{ character: string; text: string }>;
+    transitionIn?: string;
+    transitionOut?: string;
   }>;
 
   const created = [];
@@ -60,6 +62,8 @@ export async function handleShotSplit(task: Task) {
         sequence: shot.sequence,
         prompt: shot.prompt,
         duration: shot.duration,
+        transitionIn: shot.transitionIn || "cut",
+        transitionOut: shot.transitionOut || "cut",
         episodeId: payload.episodeId ?? null,
       })
       .returning();
