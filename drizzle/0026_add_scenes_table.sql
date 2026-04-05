@@ -9,5 +9,3 @@ CREATE TABLE scenes (
   sequence INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
-
-ALTER TABLE shots ADD COLUMN scene_id TEXT REFERENCES scenes(id) ON DELETE SET NULL;

@@ -6,5 +6,3 @@ CREATE TABLE character_costumes (
   reference_image TEXT,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
-
-ALTER TABLE shots ADD COLUMN costume_overrides TEXT DEFAULT '';

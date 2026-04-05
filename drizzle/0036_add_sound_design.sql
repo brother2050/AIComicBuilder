@@ -1,2 +1,1 @@
 ALTER TABLE shots ADD COLUMN sound_design TEXT DEFAULT '';
-ALTER TABLE shots ADD COLUMN music_cue TEXT DEFAULT '';
