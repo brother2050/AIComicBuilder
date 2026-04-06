@@ -794,6 +794,7 @@ async function handleShotSplitStream(
     depthOfField?: string;
     soundDesign?: string;
     musicCue?: string;
+    characters?: string[];
     referenceImagePrompts?: string[];
   };
 
@@ -907,6 +908,7 @@ async function handleShotSplitStream(
             id: genId(),
             prompt: p,
             status: "pending",
+            characters: shot.characters || [],
           }))
       ),
       episodeId: episodeId ?? null,

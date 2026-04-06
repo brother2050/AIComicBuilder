@@ -124,21 +124,22 @@ export async function handleFrameGenerate(task: Task) {
     .set({ status: "generating" })
     .where(eq(shots.id, payload.shotId));
 
-  // Smart character matching: only pass characters mentioned in frame prompts
+  // Read pre-stored character names from referenceImages (set during shot-split)
   const charsWithRefs = projectCharacters.filter((c) => !!c.referenceImage);
-  const firstFrameContext = [shot.startFrameDesc, shot.prompt].filter(Boolean).join(" ");
-  const lastFrameContext = [shot.endFrameDesc, shot.prompt].filter(Boolean).join(" ");
+  let storedCharNames: string[] = [];
+  try {
+    const refImgs = JSON.parse((shot.referenceImages as string) || "[]");
+    if (Array.isArray(refImgs) && refImgs[0]?.characters) {
+      storedCharNames = refImgs[0].characters;
+    }
+  } catch {}
 
-  const firstFrameChars = charsWithRefs.filter((c) => firstFrameContext.includes(c.name));
-  const lastFrameChars = charsWithRefs.filter((c) => lastFrameContext.includes(c.name));
+  const relevantChars = storedCharNames.length > 0
+    ? charsWithRefs.filter((c) => storedCharNames.includes(c.name))
+    : charsWithRefs.slice(0, 3);
+  const charRefImages = relevantChars.map((c) => c.referenceImage as string);
 
-  // Fallback: if no character matched, use first 3
-  const firstFrameCharRefs = (firstFrameChars.length > 0 ? firstFrameChars : charsWithRefs.slice(0, 3))
-    .map((c) => c.referenceImage as string);
-  const lastFrameCharRefs = (lastFrameChars.length > 0 ? lastFrameChars : charsWithRefs.slice(0, 3))
-    .map((c) => c.referenceImage as string);
-
-  console.log(`[FrameGenerate] Shot ${shot.sequence}: first frame chars: ${firstFrameChars.map(c => c.name).join(", ") || "fallback"}, last frame chars: ${lastFrameChars.map(c => c.name).join(", ") || "fallback"}`);
+  console.log(`[FrameGenerate] Shot ${shot.sequence}: using ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ") || "fallback"}`);
 
   // Generate first frame using startFrameDesc
   let firstFramePrompt = buildFirstFramePrompt({
@@ -151,7 +152,7 @@ export async function handleFrameGenerate(task: Task) {
   if (compositionSuffix) firstFramePrompt += compositionSuffix;
   const firstFramePath = await ai.generateImage(firstFramePrompt, {
     quality: "hd",
-    referenceImages: firstFrameCharRefs,
+    referenceImages: charRefImages,
   });
 
   // Generate last frame using endFrameDesc
@@ -165,7 +166,7 @@ export async function handleFrameGenerate(task: Task) {
   if (compositionSuffix) lastFramePrompt += compositionSuffix;
   const lastFramePath = await ai.generateImage(lastFramePrompt, {
     quality: "hd",
-    referenceImages: [firstFramePath, ...lastFrameCharRefs],
+    referenceImages: [firstFramePath, ...charRefImages],
   });
 
   await db

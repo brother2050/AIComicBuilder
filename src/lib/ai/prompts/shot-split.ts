@@ -47,6 +47,7 @@ Output a JSON array of SCENES. Each scene groups related shots that share the sa
         "depthOfField": "shallow | medium | deep",
         "soundDesign": "environmental/ambient sounds for this shot",
         "musicCue": "music direction for this shot",
+        "characters": ["exact character name appearing in this shot"],
         "transitionIn": "cut",
         "transitionOut": "cut",
         "referenceImagePrompts": ["description of reference image 1 to generate", "description of reference image 2"]
@@ -54,6 +55,11 @@ Output a JSON array of SCENES. Each scene groups related shots that share the sa
     ]
   }
 ]
+
+=== characters ===
+- Array of EXACT character names (from the provided character list) that appear in this shot
+- Include characters visible in the frame, even if they don't speak
+- Must match the character names exactly as provided in the character list
 
 === referenceImagePrompts (for reference generation mode) ===
 - Array of 1-4 image generation prompts describing reference images this shot needs
