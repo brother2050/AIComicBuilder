@@ -29,6 +29,7 @@ import {
   Plus,
 } from "lucide-react";
 import { AiOptimizeButton } from "./ai-optimize-button";
+import { InlineModelPicker } from "./model-selector";
 import { parseRefImages, serializeRefImages, type RefImage } from "@/lib/ref-image-utils";
 import { id as genId } from "@/lib/id";
 
@@ -794,18 +795,18 @@ export function ShotCard({
               {/* Reference image cards */}
               <div className="flex gap-2 flex-wrap">
                 {parsedRefImages.map((ref) => (
-                  <div key={ref.id} className="flex flex-col gap-1" style={{ width: "calc(50% - 4px)" }}>
+                  <div key={ref.id} className="rounded-lg border border-[--border-subtle] bg-white overflow-hidden" style={{ width: "calc(50% - 4px)" }}>
                     {/* Image area */}
-                    <div className="relative group">
+                    <div className="relative">
                       {ref.imagePath ? (
                         <div
-                          className="overflow-hidden rounded-lg border border-[--border-subtle] bg-[--surface] cursor-pointer hover:opacity-80 transition-opacity"
+                          className="cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={() => setPreviewSrc(uploadUrl(ref.imagePath!))}
                         >
                           <img src={uploadUrl(ref.imagePath)} className="w-full object-contain" />
                         </div>
                       ) : (
-                        <div className="flex h-20 items-center justify-center rounded-lg border border-dashed border-[--border-subtle] bg-[--surface]">
+                        <div className="flex h-20 items-center justify-center bg-[--surface]">
                           {ref.prompt ? (
                             <button
                               onClick={() => handleRegenerateRefImage(ref.id)}
@@ -819,43 +820,34 @@ export function ShotCard({
                           )}
                         </div>
                       )}
-                      {/* Hover overlay buttons */}
-                      {ref.imagePath && (
-                        <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleRegenerateRefImage(ref.id); }}
-                            className="rounded bg-black/60 p-0.5 text-white hover:bg-black/80"
-                            title={t("common.regenerate") || "Regenerate"}
-                          >
-                            <RefreshCw className="h-2.5 w-2.5" />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleRemoveRefImage(ref.id); }}
-                            className="rounded bg-black/60 p-0.5 text-white hover:bg-red-600/80"
-                            title={t("common.delete") || "Delete"}
-                          >
-                            <Trash2 className="h-2.5 w-2.5" />
-                          </button>
-                        </div>
-                      )}
-                      {!ref.imagePath && (
-                        <button
-                          onClick={() => handleRemoveRefImage(ref.id)}
-                          className="absolute top-0.5 right-0.5 rounded bg-black/40 p-0.5 text-white hover:bg-red-600/80"
-                        >
-                          <Trash2 className="h-2.5 w-2.5" />
-                        </button>
-                      )}
                     </div>
-                    {/* Editable prompt below image */}
+                    {/* Prompt textarea */}
                     <textarea
                       key={ref.id}
                       defaultValue={ref.prompt}
                       onBlur={(e) => handleUpdateRefPrompt(ref.id, e.target.value)}
-                      placeholder={t("shot.refImagePrompt") || "Reference image prompt..."}
+                      placeholder={t("shot.refImagePrompt")}
                       rows={2}
-                      className="w-full resize-none rounded-md border border-[--border-subtle] bg-white px-2 py-1 text-[11px] leading-snug text-[--text-secondary] placeholder:text-[--text-muted] focus:border-primary/40 focus:outline-none"
+                      className="w-full resize-none border-0 border-t border-[--border-subtle] bg-transparent px-2 py-1.5 text-[11px] leading-snug text-[--text-secondary] placeholder:text-[--text-muted] focus:outline-none"
                     />
+                    {/* Action bar: model selector + regenerate + delete */}
+                    <div className="flex items-center gap-1 border-t border-[--border-subtle] px-1.5 py-1">
+                      <InlineModelPicker capability="image" />
+                      <div className="flex-1" />
+                      <button
+                        onClick={() => handleRegenerateRefImage(ref.id)}
+                        disabled={!ref.prompt.trim()}
+                        className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-[--text-muted] hover:bg-[--bg-muted] hover:text-primary disabled:opacity-30 transition-colors"
+                      >
+                        <RefreshCw className="h-2.5 w-2.5" />
+                      </button>
+                      <button
+                        onClick={() => handleRemoveRefImage(ref.id)}
+                        className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-[--text-muted] hover:bg-red-50 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
 
