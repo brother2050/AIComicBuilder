@@ -837,15 +837,6 @@ export default function EpisodeStoryboardPage() {
                     <RefreshCw className="h-3.5 w-3.5" />
                   )}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleBatchGenerateRefImages}
-                  disabled={generatingRefImages || generatingSceneFrames || anyGenerating || totalShots === 0}
-                >
-                  {generatingRefImages ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
-                  {generatingRefImages ? t("common.generating") : (t("storyboard.batchRefImages") || "Batch Generate Ref Images")}
-                </Button>
               </>
             )}
           </div>
