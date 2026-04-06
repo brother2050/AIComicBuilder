@@ -1803,8 +1803,8 @@ async function handleBatchSceneFrame(
   const eligible = allShots.filter((shot) => {
     const refImages = parseRefImages(shot.referenceImages as string);
     const targets = overwrite
-      ? refImages.filter((r) => r.prompt.trim())
-      : refImages.filter((r) => r.status === "pending" && r.prompt.trim());
+      ? refImages.filter((r) => r.type === "reference" && r.prompt.trim())
+      : refImages.filter((r) => r.type === "reference" && r.status === "pending" && r.prompt.trim());
     return targets.length > 0;
   });
 
@@ -1817,8 +1817,8 @@ async function handleBatchSceneFrame(
     allShots.map(async (shot) => {
       const refImages = parseRefImages(shot.referenceImages as string);
       const targets = overwrite
-        ? refImages.filter((r) => r.prompt.trim())
-        : refImages.filter((r) => r.status === "pending" && r.prompt.trim());
+        ? refImages.filter((r) => r.type === "reference" && r.prompt.trim())
+        : refImages.filter((r) => r.type === "reference" && r.status === "pending" && r.prompt.trim());
 
       if (targets.length === 0) {
         return { shotId: shot.id, sequence: shot.sequence, status: "ok" as const, generated: 0 };
@@ -2020,10 +2020,12 @@ async function handleSingleReferenceVideo(
 
     console.log(`[SingleReferenceVideo] Shot ${shot.sequence}: generating video from scene frame`);
 
-    // Use shot-level reference images if available, otherwise fall back to character refs
-    const shotRefImages: string[] = shot.referenceImages ? JSON.parse(shot.referenceImages as string) : [];
-    const allRefImages = shotRefImages.length > 0
-      ? shotRefImages
+    // Use generated reference images (type=reference with imagePath), fall back to character refs
+    const shotRefItems = parseRefImages(shot.referenceImages as string)
+      .filter((r) => r.type === "reference" && r.imagePath)
+      .map((r) => r.imagePath as string);
+    const allRefImages = shotRefItems.length > 0
+      ? shotRefItems
       : charRefs.map((c) => c.imagePath);
 
     const result = await videoProvider.generateVideo({
@@ -2211,10 +2213,12 @@ async function handleBatchReferenceVideo(
 
         console.log(`[BatchReferenceVideo] Shot ${shot.sequence}: generating video from scene frame`);
 
-        // Use shot-level reference images if available, otherwise fall back to character refs
-        const shotRefImages: string[] = shot.referenceImages ? JSON.parse(shot.referenceImages as string) : [];
-        const allRefImages = shotRefImages.length > 0
-          ? shotRefImages
+        // Use generated reference images (type=reference with imagePath), fall back to character refs
+        const shotRefItems = parseRefImages(shot.referenceImages as string)
+          .filter((r) => r.type === "reference" && r.imagePath)
+          .map((r) => r.imagePath as string);
+        const allRefImages = shotRefItems.length > 0
+          ? shotRefItems
           : charRefs.map((c) => c.imagePath);
 
         const result = await videoProvider.generateVideo({
@@ -2653,7 +2657,7 @@ async function handleBatchRefImageGenerate(
 
   for (const shot of allShots) {
     const refImages = parseRefImages(shot.referenceImages as string);
-    const pending = refImages.filter((r) => r.status === "pending" && r.prompt.trim());
+    const pending = refImages.filter((r) => r.type === "reference" && r.status === "pending" && r.prompt.trim());
 
     if (pending.length === 0) {
       results.push({ shotId: shot.id, sequence: shot.sequence, generated: 0, failed: 0 });
@@ -2833,7 +2837,7 @@ async function handleGenerateRefPrompts(
     if (!shot || !entry.prompts?.length) continue;
 
     const shotCharacters = entry.characters || [];
-    const refImages: RefImage[] = entry.prompts.map((p) => ({
+    const newRefImages: RefImage[] = entry.prompts.map((p) => ({
       id: genId(),
       type: "reference" as const,
       prompt: p,
@@ -2841,9 +2845,13 @@ async function handleGenerateRefPrompts(
       characters: shotCharacters,
     }));
 
+    // Preserve existing first_frame/last_frame items, replace only reference items
+    const existing = parseRefImages(shot.referenceImages as string);
+    const frameItems = existing.filter((r) => r.type === "first_frame" || r.type === "last_frame");
+
     await db
       .update(shots)
-      .set({ referenceImages: serializeRefImages(refImages) })
+      .set({ referenceImages: serializeRefImages([...frameItems, ...newRefImages]) })
       .where(eq(shots.id, shot.id));
     updatedCount++;
   }
@@ -2868,7 +2876,7 @@ async function handleSingleShotRefImageGenerateAll(
   if (!shot) return NextResponse.json({ error: "Shot not found" }, { status: 404 });
 
   const refImages = parseRefImages(shot.referenceImages as string);
-  const pending = refImages.filter((r) => r.status === "pending" && r.prompt.trim());
+  const pending = refImages.filter((r) => r.type === "reference" && r.status === "pending" && r.prompt.trim());
   if (pending.length === 0) {
     return NextResponse.json({ message: "No pending ref images", generated: 0 });
   }

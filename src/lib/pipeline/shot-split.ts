@@ -123,14 +123,32 @@ export async function handleShotSplit(task: Task) {
         depthOfField: (shotData.depthOfField as string) || "medium",
         soundDesign: (shotData.soundDesign as string) || "",
         musicCue: (shotData.musicCue as string) || "",
-        referenceImages: JSON.stringify(
-          (Array.isArray(shotData.referenceImagePrompts) ? shotData.referenceImagePrompts : [])
+        referenceImages: JSON.stringify([
+          // First frame & last frame items
+          {
+            id: genId(),
+            type: "first_frame",
+            prompt: (shotData.startFrame as string) || "",
+            status: "pending",
+            characters: Array.isArray(shotData.characters) ? shotData.characters : [],
+          },
+          {
+            id: genId(),
+            type: "last_frame",
+            prompt: (shotData.endFrame as string) || "",
+            status: "pending",
+            characters: Array.isArray(shotData.characters) ? shotData.characters : [],
+          },
+          // Reference image items
+          ...(Array.isArray(shotData.referenceImagePrompts) ? shotData.referenceImagePrompts : [])
             .map((p: string) => ({
               id: genId(),
+              type: "reference",
               prompt: p,
               status: "pending",
-            }))
-        ),
+              characters: Array.isArray(shotData.characters) ? shotData.characters : [],
+            })),
+        ]),
         episodeId: payload.episodeId ?? null,
         sceneId: sceneId ?? null,
       })
