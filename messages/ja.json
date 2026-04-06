@@ -304,6 +304,8 @@
       "frameGenerateLast": "最後のフレーム",
       "sceneFrameGenerate": "シーン参照フレーム",
       "sceneFrameGenerateDesc": "参照モードでのシーンフレーム生成プロンプト",
+      "refImagePrompts": "参考画像プロンプト生成",
+      "refImagePromptsDesc": "ストーリーボードから各ショットの参考画像プロンプトを生成",
       "videoGenerate": "動画生成",
       "refVideoGenerate": "参照動画生成",
       "refVideoPrompt": "動画プロンプト生成"

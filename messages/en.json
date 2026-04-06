@@ -304,6 +304,8 @@
       "frameGenerateLast": "Last Frame",
       "sceneFrameGenerate": "Scene Reference Frame",
       "sceneFrameGenerateDesc": "Prompt for scene frame generation in reference mode",
+      "refImagePrompts": "Ref Image Prompts",
+      "refImagePromptsDesc": "Generate reference image prompts for each shot from storyboard descriptions",
       "videoGenerate": "Video Generation",
       "refVideoGenerate": "Reference Video",
       "refVideoPrompt": "Video Prompt Generation"

@@ -304,6 +304,8 @@
       "frameGenerateLast": "마지막 프레임",
       "sceneFrameGenerate": "씬 참조 프레임",
       "sceneFrameGenerateDesc": "참조 모드에서 씬 프레임 생성 프롬프트",
+      "refImagePrompts": "참고 이미지 프롬프트 생성",
+      "refImagePromptsDesc": "스토리보드에서 각 샷의 참고 이미지 프롬프트 생성",
       "videoGenerate": "영상 생성",
       "refVideoGenerate": "참조 영상 생성",
       "refVideoPrompt": "영상 프롬프트 생성"

@@ -306,6 +306,8 @@
       "frameGenerateLast": "尾帧生成",
       "sceneFrameGenerate": "场景参考帧",
       "sceneFrameGenerateDesc": "基于参考图模式下的场景帧生成提示词",
+      "refImagePrompts": "参考图提示词生成",
+      "refImagePromptsDesc": "根据分镜描述为每个镜头生成参考图提示词",
       "videoGenerate": "视频生成",
       "refVideoGenerate": "参考视频生成",
       "refVideoPrompt": "视频提示词生成"

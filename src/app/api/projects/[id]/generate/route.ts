@@ -28,7 +28,7 @@ import { buildRefVideoPromptRequest } from "@/lib/ai/prompts/ref-video-prompt-ge
 import { buildCharacterTurnaroundPrompt } from "@/lib/ai/prompts/character-image";
 import { assembleVideo } from "@/lib/video/ffmpeg";
 import { parseRefImages, serializeRefImages, type RefImage } from "@/lib/ref-image-utils";
-import { REF_IMAGE_PROMPT_SYSTEM, buildRefImagePromptsRequest } from "@/lib/ai/prompts/ref-image-prompts";
+import { buildRefImagePromptsRequest } from "@/lib/ai/prompts/ref-image-prompts";
 
 export const maxDuration = 300;
 
@@ -2812,8 +2812,10 @@ async function handleGenerateRefPrompts(
     visualStyle
   );
 
+  const refImageSystem = await resolvePrompt("ref_image_prompts", { userId, projectId });
+
   const result = await textProvider.generateText(promptRequest, {
-    systemPrompt: REF_IMAGE_PROMPT_SYSTEM,
+    systemPrompt: refImageSystem,
     temperature: 0.7,
   });
 

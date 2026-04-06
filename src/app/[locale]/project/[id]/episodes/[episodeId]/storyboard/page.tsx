@@ -643,7 +643,7 @@ export default function EpisodeStoryboardPage() {
           <PromptEditButton
             promptKeys={
               generationMode === "reference"
-                ? ["shot_split", "scene_frame_generate"]
+                ? ["shot_split", "ref_image_prompts", "scene_frame_generate"]
                 : "shot_split"
             }
             projectId={project.id}

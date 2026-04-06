@@ -1281,6 +1281,55 @@ const scriptOutlineDef: PromptDefinition = {
   },
 };
 
+// ─── 15. ref_image_prompts ───────────────────────────────
+
+const REF_IMAGE_PROMPTS_ROLE = `You are a professional cinematographer preparing reference images for AI video generation.
+
+For each shot in the storyboard, generate 1-4 reference image prompts AND identify which characters appear in that shot.
+
+Think about what visual references the video AI needs:
+- Character close-ups: face, expression, specific costume in this scene
+- Key objects/props: items that must appear consistent
+- Environment/setting: the location, lighting, atmosphere
+- Specific moments: a particular pose or interaction that must be captured`;
+
+const REF_IMAGE_PROMPTS_RULES = `Rules:
+- Each prompt must be a COMPLETE image generation description (style, subject, details, lighting)
+- Include the art style from the project's visual style
+- 30-80 words per prompt
+- 1-4 prompts per shot depending on complexity
+- Simple shot (one character, simple action) → 1-2 prompts
+- Complex shot (multiple characters, important props, specific setting) → 3-4 prompts
+- "characters" array must list EXACT character names from the provided character list
+
+CRITICAL LANGUAGE RULE: Output in the SAME language as the input.`;
+
+const REF_IMAGE_PROMPTS_FORMAT = `Output ONLY valid JSON (no markdown, no code blocks):
+[
+  {
+    "shotSequence": 1,
+    "characters": ["character name 1", "character name 2"],
+    "prompts": ["prompt for ref image 1", "prompt for ref image 2"]
+  }
+]`;
+
+const refImagePromptsDef: PromptDefinition = {
+  key: "ref_image_prompts",
+  nameKey: "promptTemplates.prompts.refImagePrompts",
+  descriptionKey: "promptTemplates.prompts.refImagePromptsDesc",
+  category: "frame",
+  slots: [
+    slot("role_definition", REF_IMAGE_PROMPTS_ROLE, true),
+    slot("writing_rules", REF_IMAGE_PROMPTS_RULES, true),
+    slot("output_format", REF_IMAGE_PROMPTS_FORMAT, false),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role_definition"), "", r("writing_rules"), "", r("output_format")].join("\n");
+  },
+};
+
 // ── Registry ─────────────────────────────────────────────
 
 export const PROMPT_REGISTRY: PromptDefinition[] = [
@@ -1295,6 +1344,7 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   frameGenerateFirstDef,
   frameGenerateLastDef,
   sceneFrameGenerateDef,
+  refImagePromptsDef,
   videoGenerateDef,
   refVideoGenerateDef,
   refVideoPromptDef,
