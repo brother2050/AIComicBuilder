@@ -380,8 +380,27 @@ export function ShotCard({
     saveRefImages(updated);
   }
 
-  // Update a ref image's prompt
+  // Local state for ref image prompts (controlled inputs with debounced save)
+  const [localRefPrompts, setLocalRefPrompts] = useState<Record<string, string>>({});
+  const refPromptTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  function getRefPromptValue(refId: string, defaultPrompt: string) {
+    return localRefPrompts[refId] ?? defaultPrompt;
+  }
+
+  function handleRefPromptChange(refId: string, value: string) {
+    setLocalRefPrompts((prev) => ({ ...prev, [refId]: value }));
+    // Debounced save
+    if (refPromptTimerRef.current[refId]) clearTimeout(refPromptTimerRef.current[refId]);
+    refPromptTimerRef.current[refId] = setTimeout(() => {
+      const updated = parsedRefImages.map((r) => r.id === refId ? { ...r, prompt: value } : r);
+      saveRefImages(updated);
+    }, 800);
+  }
+
+  // Update a ref image's prompt (immediate save, e.g. on blur)
   function handleUpdateRefPrompt(refId: string, prompt: string) {
+    if (refPromptTimerRef.current[refId]) clearTimeout(refPromptTimerRef.current[refId]);
     const updated = parsedRefImages.map((r) => r.id === refId ? { ...r, prompt } : r);
     saveRefImages(updated);
   }
@@ -837,13 +856,13 @@ export function ShotCard({
                           </div>
                         )}
                       </div>
-                      {/* Editable prompt */}
+                      {/* Editable prompt with auto-save */}
                       <textarea
-                        key={`prompt-${ref.id}`}
-                        defaultValue={ref.prompt}
+                        value={getRefPromptValue(ref.id, ref.prompt)}
+                        onChange={(e) => handleRefPromptChange(ref.id, e.target.value)}
                         onBlur={(e) => handleUpdateRefPrompt(ref.id, e.target.value)}
                         placeholder={t("shot.refImagePrompt")}
-                        rows={2}
+                        rows={4}
                         className="w-full resize-none border-0 border-t border-[--border-subtle] bg-transparent px-2 py-1.5 text-[11px] leading-snug text-[--text-secondary] placeholder:text-[--text-muted] focus:outline-none"
                       />
                       {/* Action bar */}
