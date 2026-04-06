@@ -16,7 +16,8 @@
     "generationFailed": "생성에 실패했습니다. 모델 설정을 확인하고 다시 시도해 주세요.",
     "generationCompleted": "생성이 완료되었습니다",
     "batchPartialFailed": "일부 항목 생성에 실패했습니다. 나중에 다시 시도해 주세요.",
-    "promptTemplates": "프롬프트 관리"
+    "promptTemplates": "프롬프트 관리",
+    "upload": "업로드"
   },
   "dashboard": {
     "title": "내 프로젝트",
@@ -111,7 +112,9 @@
     "deleteConfirm": "\"{name}\"을(를) 삭제하시겠습니까?",
     "relations": "캐릭터 관계",
     "relationDesc": "설명 (선택사항)",
-    "addRelation": "추가"
+    "addRelation": "추가",
+    "characterA": "캐릭터 A",
+    "characterB": "캐릭터 B"
   },
   "shot": {
     "sequence": "샷 {number}",
@@ -155,14 +158,21 @@
     "generateRefImages": "참조 이미지 생성",
     "regenerateRefImages": "참조 이미지 재생성",
     "maxRefImages": "최대 9개의 참조 이미지",
-    "transition": "전환"
+    "transition": "전환",
+    "focus": "포커스",
+    "dof": "피사계 심도",
+    "sfx": "효과음",
+    "music": "음악",
+    "shot": "샷"
   },
   "storyboard": {
     "stale": "업데이트 필요",
     "regenerateStale": "오래된 샷 재생성",
     "batchRefImages": "참고 이미지 일괄 생성",
     "generateRefPrompts": "참고 이미지 프롬프트 생성",
-    "batchGenerateRefImages": "참고 이미지 일괄 생성"
+    "batchGenerateRefImages": "참고 이미지 일괄 생성",
+    "needTwoVersions": "비교하려면 2개 이상의 버전이 필요합니다",
+    "noFrame": "프레임 없음"
   },
   "episode": {
     "title": "에피소드 관리",

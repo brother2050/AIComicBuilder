@@ -97,7 +97,7 @@ export function CharacterRelations({
           onChange={(e) => setCharA(e.target.value)}
           className="h-9 rounded-md border bg-background px-3 text-sm"
         >
-          <option value="">Character A</option>
+          <option value="">{tChar("characterA")}</option>
           {characters.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
@@ -116,7 +116,7 @@ export function CharacterRelations({
           onChange={(e) => setCharB(e.target.value)}
           className="h-9 rounded-md border bg-background px-3 text-sm"
         >
-          <option value="">Character B</option>
+          <option value="">{tChar("characterB")}</option>
           {characters.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}

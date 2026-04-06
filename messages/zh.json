@@ -16,7 +16,8 @@
     "generationFailed": "生成失败，请检查模型配置后重试",
     "generationCompleted": "生成完成",
     "batchPartialFailed": "部分项目生成失败，请稍后重试",
-    "promptTemplates": "提示词管理"
+    "promptTemplates": "提示词管理",
+    "upload": "上传"
   },
   "dashboard": {
     "title": "我的项目",
@@ -112,7 +113,9 @@
     "deleteConfirm": "确定要删除角色「{name}」吗？",
     "relations": "角色关系",
     "relationDesc": "描述（可选）",
-    "addRelation": "添加"
+    "addRelation": "添加",
+    "characterA": "角色A",
+    "characterB": "角色B"
   },
   "shot": {
     "sequence": "第 {number} 个分镜",
@@ -157,14 +160,21 @@
     "refChars": "角色",
     "regenerateRefImages": "重新生成参考图",
     "maxRefImages": "最多9张参考图",
-    "transition": "转场"
+    "transition": "转场",
+    "focus": "焦点",
+    "dof": "景深",
+    "sfx": "音效",
+    "music": "音乐",
+    "shot": "镜头"
   },
   "storyboard": {
     "stale": "需要更新",
     "regenerateStale": "重新生成过期镜头",
     "batchRefImages": "批量生成参考图",
     "generateRefPrompts": "生成参考图提示词",
-    "batchGenerateRefImages": "批量生成参考图"
+    "batchGenerateRefImages": "批量生成参考图",
+    "needTwoVersions": "至少需要2个版本才能对比",
+    "noFrame": "暂无画面"
   },
   "episode": {
     "title": "分集管理",

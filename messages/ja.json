@@ -16,7 +16,8 @@
     "generationFailed": "生成に失敗しました。モデル設定を確認して再試行してください。",
     "generationCompleted": "生成が完了しました",
     "batchPartialFailed": "一部のアイテムの生成に失敗しました。後でもう一度お試しください。",
-    "promptTemplates": "プロンプト管理"
+    "promptTemplates": "プロンプト管理",
+    "upload": "アップロード"
   },
   "dashboard": {
     "title": "マイプロジェクト",
@@ -111,7 +112,9 @@
     "deleteConfirm": "「{name}」を削除してもよろしいですか？",
     "relations": "キャラクター関係",
     "relationDesc": "説明（任意）",
-    "addRelation": "追加"
+    "addRelation": "追加",
+    "characterA": "キャラクターA",
+    "characterB": "キャラクターB"
   },
   "shot": {
     "sequence": "ショット {number}",
@@ -155,14 +158,21 @@
     "generateRefImages": "参照画像を生成",
     "regenerateRefImages": "参照画像を再生成",
     "maxRefImages": "最大9枚の参照画像",
-    "transition": "トランジション"
+    "transition": "トランジション",
+    "focus": "フォーカス",
+    "dof": "被写界深度",
+    "sfx": "効果音",
+    "music": "音楽",
+    "shot": "ショット"
   },
   "storyboard": {
     "stale": "更新が必要",
     "regenerateStale": "古いショットを再生成",
     "batchRefImages": "参考画像を一括生成",
     "generateRefPrompts": "参考画像プロンプト生成",
-    "batchGenerateRefImages": "参考画像を一括生成"
+    "batchGenerateRefImages": "参考画像を一括生成",
+    "needTwoVersions": "比較には2つ以上のバージョンが必要です",
+    "noFrame": "フレームなし"
   },
   "episode": {
     "title": "エピソード管理",

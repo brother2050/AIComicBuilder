@@ -43,7 +43,7 @@ export function VersionCompare({
   if (versions.length < 2) {
     return (
       <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
-        {t("storyboard.needTwoVersions") || "Need at least 2 versions to compare"}
+        {t("storyboard.needTwoVersions")}
       </div>
     );
   }
@@ -92,7 +92,7 @@ export function VersionCompare({
             <div key={i} className="grid grid-cols-2 gap-4 rounded-lg border p-3">
               <div className="space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">
-                  Shot {i + 1} — v{versions.find((v) => v.id === versionAId)?.versionNum}
+                  {t("shot.shot")} {i + 1} — v{versions.find((v) => v.id === versionAId)?.versionNum}
                 </span>
                 {shotA?.firstFrame ? (
                   <img
@@ -102,7 +102,7 @@ export function VersionCompare({
                   />
                 ) : (
                   <div className="w-full rounded aspect-video bg-muted flex items-center justify-center text-xs text-muted-foreground">
-                    No frame
+                    {t("storyboard.noFrame")}
                   </div>
                 )}
                 {shotA?.prompt && (
@@ -111,7 +111,7 @@ export function VersionCompare({
               </div>
               <div className="space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">
-                  Shot {i + 1} — v{versions.find((v) => v.id === versionBId)?.versionNum}
+                  {t("shot.shot")} {i + 1} — v{versions.find((v) => v.id === versionBId)?.versionNum}
                 </span>
                 {shotB?.firstFrame ? (
                   <img
@@ -121,7 +121,7 @@ export function VersionCompare({
                   />
                 ) : (
                   <div className="w-full rounded aspect-video bg-muted flex items-center justify-center text-xs text-muted-foreground">
-                    No frame
+                    {t("storyboard.noFrame")}
                   </div>
                 )}
                 {shotB?.prompt && (

@@ -669,19 +669,19 @@ export function ShotCard({
             )}
             {focalPoint && (
               <span className="text-xs text-[--text-muted]">
-                focus: {focalPoint}
+                {t("shot.focus")}: {focalPoint}
               </span>
             )}
             {depthOfField && depthOfField !== "medium" && (
               <span className="text-xs text-[--text-muted]">
-                DoF: {depthOfField}
+                {t("shot.dof")}: {depthOfField}
               </span>
             )}
           </div>
           {(soundDesign || musicCue) && (
             <div className="mt-1 flex items-center gap-2 flex-wrap text-xs text-[--text-muted]">
-              {soundDesign && <span>SFX: {soundDesign}</span>}
-              {musicCue && <span>Music: {musicCue}</span>}
+              {soundDesign && <span>{t("shot.sfx")}: {soundDesign}</span>}
+              {musicCue && <span>{t("shot.music")}: {musicCue}</span>}
             </div>
           )}
         </div>
@@ -729,7 +729,7 @@ export function ShotCard({
             {generationMode === "reference" ? (
               <div>
                 <div className="mb-1 flex items-center gap-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-500">{t("shot.sceneFramePrompt") || "场景帧提示词"}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-500">{t("shot.sceneFramePrompt")}</p>
                   <AiOptimizeButton
                     value={editStartFrame}
                     onOptimized={(v) => { setEditStartFrame(v); patchShot({ startFrameDesc: v }); }}
@@ -742,7 +742,7 @@ export function ShotCard({
                   onChange={(e) => setEditStartFrame(e.target.value)}
                   onBlur={() => patchShot({ startFrameDesc: editStartFrame })}
                   rows={2}
-                  placeholder={t("shot.sceneFramePrompt") || "场景帧提示词"}
+                  placeholder={t("shot.sceneFramePrompt")}
                   className="border-violet-200 bg-violet-50/30 text-sm"
                 />
               </div>
@@ -962,7 +962,7 @@ export function ShotCard({
                         className="flex flex-1 items-center justify-center gap-1 rounded-md border border-[--border-subtle] bg-white py-0.5 text-[10px] text-[--text-muted] transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-40"
                       >
                         <Upload className="h-2.5 w-2.5" />
-                        上传
+                        {t("common.upload")}
                       </button>
                       {asset.src && (
                         <button
@@ -991,7 +991,7 @@ export function ShotCard({
             {(generatingFrames || generatingSceneFrame || batchGeneratingFrames)
               ? t("common.generating")
               : generationMode === "reference"
-                ? (hasRefImages ? (t("shot.regenerateRefImages") || "Regenerate Ref Images") : (t("shot.generateRefImages") || "Generate Ref Images"))
+                ? (hasRefImages ? t("shot.regenerateRefImages") : t("shot.generateRefImages"))
                 : hasFrame ? t("shot.regenerateFrames") : t("project.generateFrames")
             }
           </Button>
