@@ -77,15 +77,7 @@ interface ShotCardProps {
   batchGeneratingVideos?: boolean;
 }
 
-const TRANSITIONS = [
-  { value: "cut", label: "Cut" },
-  { value: "dissolve", label: "Dissolve" },
-  { value: "fade_in", label: "Fade In" },
-  { value: "fade_out", label: "Fade Out" },
-  { value: "wipeleft", label: "Wipe Left" },
-  { value: "slideright", label: "Slide Right" },
-  { value: "circleopen", label: "Circle Open" },
-];
+const TRANSITION_VALUES = ["cut", "dissolve", "fade_in", "fade_out", "wipeleft", "slideright", "circleopen"] as const;
 
 type StepState = "done" | "generating" | "error" | "idle";
 
@@ -657,8 +649,8 @@ export function ShotCard({
                 onClick={(e) => e.stopPropagation()}
                 className="h-7 rounded border border-[--border-subtle] bg-white px-2 text-xs outline-none focus:border-primary/50"
               >
-                {TRANSITIONS.map((tr) => (
-                  <option key={tr.value} value={tr.value}>{tr.label}</option>
+                {TRANSITION_VALUES.map((v) => (
+                  <option key={v} value={v}>{t(`shot.trans_${v}`)}</option>
                 ))}
               </select>
               <span className="text-[--text-muted]">&rarr;</span>
@@ -668,8 +660,8 @@ export function ShotCard({
                 onClick={(e) => e.stopPropagation()}
                 className="h-7 rounded border border-[--border-subtle] bg-white px-2 text-xs outline-none focus:border-primary/50"
               >
-                {TRANSITIONS.map((tr) => (
-                  <option key={tr.value} value={tr.value}>{tr.label}</option>
+                {TRANSITION_VALUES.map((v) => (
+                  <option key={v} value={v}>{t(`shot.trans_${v}`)}</option>
                 ))}
               </select>
             </div>
