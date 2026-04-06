@@ -1772,11 +1772,9 @@ async function handleBatchSceneFrame(
     : process.env.UPLOAD_DIR || "./uploads";
 
   const projectCharacters = await getEpisodeCharacters(projectId, episodeId);
-  const charRefs = projectCharacters
-    .filter((c) => !!c.referenceImage)
-    .map((c) => c.referenceImage as string);
+  const charsWithRefs = projectCharacters.filter((c) => !!c.referenceImage);
 
-  if (charRefs.length === 0) {
+  if (charsWithRefs.length === 0) {
     return NextResponse.json({ error: "No character reference images available." }, { status: 400 });
   }
 
@@ -1795,15 +1793,29 @@ async function handleBatchSceneFrame(
       continue;
     }
 
+    // Smart character matching: only pass characters mentioned in this shot
+    const shotContext = [shot.prompt, shot.startFrameDesc, shot.motionScript, ...targets.map((r) => r.prompt)].filter(Boolean).join(" ");
+    const relevantChars = charsWithRefs.filter((c) => shotContext.includes(c.name));
+    const shotCharRefs = (relevantChars.length > 0 ? relevantChars : charsWithRefs.slice(0, 3))
+      .map((c) => c.referenceImage as string);
+
+    console.log(`[BatchRefImage] Shot ${shot.sequence}: ${relevantChars.length}/${charsWithRefs.length} chars matched: ${relevantChars.map(c => c.name).join(", ")}`);
+
     await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
     let generated = 0;
 
     for (const entry of targets) {
+      // Per-entry: check if this specific prompt mentions particular characters
+      const entryChars = charsWithRefs.filter((c) => entry.prompt.includes(c.name));
+      const entryCharRefs = entryChars.length > 0
+        ? entryChars.map((c) => c.referenceImage as string)
+        : shotCharRefs;
+
       try {
         const imagePath = await imageProvider.generateImage(entry.prompt, {
           quality: "hd",
           ...imageOpts,
-          referenceImages: charRefs,
+          referenceImages: entryCharRefs,
         });
         entry.imagePath = imagePath;
         entry.status = "generated";
@@ -2686,11 +2698,15 @@ async function handleSingleRefImageGenerate(
     return NextResponse.json({ error: "No prompt provided" }, { status: 400 });
   }
 
-  // Get character references
+  // Smart character matching: only pass characters mentioned in this ref prompt or shot
   const projectCharacters = await getEpisodeCharacters(projectId);
-  const charRefs = projectCharacters
-    .filter((c) => !!c.referenceImage)
+  const charsWithRefs = projectCharacters.filter((c) => !!c.referenceImage);
+  const context = [entry.prompt, shot.prompt, shot.startFrameDesc].filter(Boolean).join(" ");
+  const relevantChars = charsWithRefs.filter((c) => context.includes(c.name));
+  const charRefs = (relevantChars.length > 0 ? relevantChars : charsWithRefs.slice(0, 3))
     .map((c) => c.referenceImage as string);
+
+  console.log(`[SingleRefImage] Shot ${shot.sequence}: ${relevantChars.length} chars matched for ref "${refImageId}"`);
 
   const imageProvider = resolveImageProvider(modelConfig);
 
@@ -2825,9 +2841,18 @@ async function handleSingleShotRefImageGenerateAll(
   }
 
   const projectCharacters = await getEpisodeCharacters(projectId);
-  const charRefs = projectCharacters
-    .filter((c) => !!c.referenceImage)
+  const charsWithRefs = projectCharacters.filter((c) => !!c.referenceImage);
+
+  // Build context text for character matching (shot prompt + all ref prompts)
+  const shotContext = [shot.prompt, shot.startFrameDesc, shot.motionScript, ...pending.map((r) => r.prompt)].filter(Boolean).join(" ");
+
+  // Filter: only include characters mentioned in this shot's context
+  const relevantChars = charsWithRefs.filter((c) => shotContext.includes(c.name));
+  // Fallback: if no character name matched, use all (may be a no-character scene)
+  const charRefsForShot = (relevantChars.length > 0 ? relevantChars : charsWithRefs.slice(0, 3))
     .map((c) => c.referenceImage as string);
+
+  console.log(`[RefImageGenAll] Shot ${shot.sequence}: ${relevantChars.length}/${charsWithRefs.length} characters matched: ${relevantChars.map(c => c.name).join(", ")}`);
 
   const ratio = (payload?.ratio as string) || "16:9";
   const imgOpts = ratioToImageOpts(ratio);
@@ -2835,11 +2860,17 @@ async function handleSingleShotRefImageGenerateAll(
 
   let generated = 0;
   for (const entry of pending) {
+    // Per-entry character matching: check if this specific ref prompt mentions different characters
+    const entryChars = charsWithRefs.filter((c) => entry.prompt.includes(c.name));
+    const entryCharRefs = entryChars.length > 0
+      ? entryChars.map((c) => c.referenceImage as string)
+      : charRefsForShot;
+
     try {
       const imagePath = await imageProvider.generateImage(entry.prompt, {
         quality: "hd",
         ...imgOpts,
-        referenceImages: charRefs,
+        referenceImages: entryCharRefs,
       });
       entry.imagePath = imagePath;
       entry.status = "generated";
