@@ -156,7 +156,12 @@ export default function EpisodeStoryboardPage() {
     for (const shot of project.shots) {
       try {
         const refs = JSON.parse(shot.referenceImages || "[]");
-        if (refs.some((r: any) => typeof r === "object" && r.status === "pending" && r.prompt)) {
+        // Only check reference-type items (ignore first_frame/last_frame items)
+        const refOnly = refs.filter((r: any) => typeof r === "object" && r.type === "reference");
+        // If shot has no reference items at all, skip blocking check
+        if (refOnly.length === 0) continue;
+        // Block if any reference item with prompt is still pending
+        if (refOnly.some((r: any) => r.status === "pending" && r.prompt)) {
           return false;
         }
       } catch {}
@@ -169,7 +174,8 @@ export default function EpisodeStoryboardPage() {
     return project.shots.filter((s) => {
       try {
         const refs = JSON.parse(s.referenceImages || "[]");
-        return Array.isArray(refs) && refs.length > 0 && refs.some((r: any) => r.prompt);
+        const refOnly = refs.filter((r: any) => r.type === "reference");
+        return refOnly.length > 0 && refOnly.some((r: any) => r.prompt);
       } catch { return false; }
     }).length;
   }, [project?.shots]);
@@ -179,7 +185,8 @@ export default function EpisodeStoryboardPage() {
     return project.shots.filter((s) => {
       try {
         const refs = JSON.parse(s.referenceImages || "[]");
-        return Array.isArray(refs) && refs.length > 0 && refs.every((r: any) => r.status === "generated" && r.imagePath);
+        const refOnly = refs.filter((r: any) => r.type === "reference");
+        return refOnly.length > 0 && refOnly.every((r: any) => r.status === "generated" && r.imagePath);
       } catch { return false; }
     }).length;
   }, [project?.shots]);
