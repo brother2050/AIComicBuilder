@@ -49,3 +49,6 @@ next-env.d.ts
 .superpowers
 
 run_kling.sh
+
+# scratchpad clones (not part of project)
+/tmp/
