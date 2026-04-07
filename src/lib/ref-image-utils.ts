@@ -9,6 +9,7 @@ export interface RefImage {
   imagePath?: string;
   status: "pending" | "generated";
   characters?: string[];
+  model?: { providerId: string; modelId: string };
 }
 
 /**
@@ -48,6 +49,7 @@ export function parseRefImages(json: string | null | undefined): RefImage[] {
         imagePath: obj.imagePath as string | undefined,
         status: (obj.status as "pending" | "generated") || (obj.imagePath ? "generated" : "pending"),
         characters: Array.isArray(obj.characters) ? obj.characters as string[] : undefined,
+        model: obj.model as { providerId: string; modelId: string } | undefined,
       };
     });
   } catch {

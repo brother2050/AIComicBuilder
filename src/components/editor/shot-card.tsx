@@ -415,6 +415,21 @@ export function ShotCard({
   // Per-ref-image loading state
   const [regeneratingRefIds, setRegeneratingRefIds] = useState<Set<string>>(new Set());
 
+  // Resolve a model ref to a full provider config (for per-card model override)
+  function resolvePerCardImageRef(modelRef?: { providerId: string; modelId: string }) {
+    if (!modelRef) return null;
+    const providers = useModelStore.getState().providers;
+    const provider = providers.find((p) => p.id === modelRef.providerId);
+    if (!provider) return null;
+    return {
+      protocol: provider.protocol,
+      baseUrl: provider.baseUrl,
+      apiKey: provider.apiKey,
+      secretKey: provider.secretKey,
+      modelId: modelRef.modelId,
+    };
+  }
+
   // Regenerate a single ref image
   async function handleRegenerateRefImage(refId: string) {
     if (!imageGuard()) return;
@@ -423,7 +438,14 @@ export function ShotCard({
     setRegeneratingRefIds((prev) => new Set(prev).add(refId));
 
     try {
-      const modelConfig = getModelConfig();
+      // Get per-card model (if set) or fall back to global
+      const ref = parsedRefImages.find((r) => r.id === refId);
+      const baseConfig = getModelConfig();
+      const perCardImage = resolvePerCardImageRef(ref?.model);
+      const modelConfig = perCardImage
+        ? { ...baseConfig, image: perCardImage }
+        : baseConfig;
+
       const resp = await apiFetch(`/api/projects/${projectId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -868,7 +890,16 @@ export function ShotCard({
                       </div>
                       {/* Action bar */}
                       <div className="flex items-center gap-1 border-t border-[--border-subtle] px-1.5 py-1">
-                        <InlineModelPicker capability="image" />
+                        <InlineModelPicker
+                          capability="image"
+                          value={ref.model || null}
+                          onChange={(modelRef) => {
+                            const updated = parsedRefImages.map((r) =>
+                              r.id === ref.id ? { ...r, model: modelRef } : r
+                            );
+                            saveRefImages(updated);
+                          }}
+                        />
                         <div className="flex-1" />
                         <button
                           onClick={() => handleRegenerateRefImage(ref.id)}
