@@ -43,13 +43,24 @@ export class OpenAIProvider implements AIProvider {
       messages.push({ role: "user", content: prompt });
     }
 
-    const response = await this.client.chat.completions.create({
-      model: options?.model || this.defaultModel,
-      messages,
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens,
-    });
-    return response.choices[0]?.message?.content || "";
+    try {
+      const response = await this.client.chat.completions.create({
+        model: options?.model || this.defaultModel,
+        messages,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.maxTokens,
+      });
+      return response.choices[0]?.message?.content || "";
+    } catch (error: any) {
+      console.error("[OpenAIProvider] generateText error:", error?.message || error);
+      console.error("[OpenAIProvider] Model:", options?.model || this.defaultModel);
+      console.error("[OpenAIProvider] Has images:", options?.images?.length || 0);
+      console.error("[OpenAIProvider] Messages length:", messages.length);
+      if (error?.response?.data) {
+        console.error("[OpenAIProvider] Response data:", error.response.data);
+      }
+      throw error;
+    }
   }
 
   async generateImage(prompt: string, options?: ImageOptions): Promise<string> {

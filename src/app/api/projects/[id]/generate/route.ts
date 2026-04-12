@@ -7,6 +7,7 @@ import { projects, episodes, characters, shots, dialogues, storyboardVersions, e
 import { eq, asc, and, lt, gt, desc, or, isNull, inArray } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import path from "path";
+import fs from "node:fs";
 import { id as genId } from "@/lib/id";
 import { enqueueTask } from "@/lib/task-queue";
 import type { TaskType } from "@/lib/task-queue";
@@ -160,6 +161,7 @@ export async function POST(
   };
 
   const { action, payload, modelConfig, episodeId } = body;
+  console.log(`[Generate API] action=${action}, episodeId=${episodeId}`);
 
   if (action === "script_outline") {
     return handleScriptOutlineAction(projectId, userId, payload, modelConfig, episodeId);
@@ -803,6 +805,8 @@ async function handleShotSplitStream(
   modelConfig?: ModelConfig,
   episodeId?: string
 ) {
+  console.log(`[ShotSplit] Starting: projectId=${projectId}, episodeId=${episodeId}`);
+
   let script: string | null = null;
   let generationMode: string = "keyframe";
   if (episodeId) {
@@ -1015,8 +1019,10 @@ async function handleShotSplitStream(
     createdAt: new Date(),
     episodeId: episodeId ?? null,
   });
+  console.log(`[ShotSplit] Created version: id=${versionId}, episodeId=${episodeId ?? null}`);
 
   for (const shot of allShots) {
+    console.log(`[ShotSplit] Creating shot: sequence=${shot.sequence}, episodeId=${episodeId ?? null}`);
     const shotId = genId();
     await db.insert(shots).values({
       id: shotId,
@@ -1037,6 +1043,7 @@ async function handleShotSplitStream(
       musicCue: shot.musicCue || "",
       episodeId: episodeId ?? null,
     });
+    console.log(`[ShotSplit] Shot inserted: id=${shotId}, episodeId=${episodeId ?? null}`);
     // No automatic asset seeding — shot_assets rows are only created when
     // the user explicitly clicks "生成首尾帧提示词" or "生成参考图提示词".
     // Each generation button writes only its own asset type.
@@ -2719,13 +2726,38 @@ async function handleBatchVideoPrompt(
           sceneFrames: sceneFrameInfos,
           dialogues: dialogueList.length > 0 ? dialogueList : undefined,
         });
-        const rawPrompt = await textProvider.generateText(promptRequest, {
-          systemPrompt: refVideoSystem,
-          images: visionFrames,
-        });
+        // Debug: log vision frames info
+        console.log(`[BatchVideoPrompt] Shot ${shot.sequence} visionFrames:`, visionFrames.map((f) => ({ path: f, exists: path.resolve(f).startsWith("/") && fs.existsSync(path.resolve(f)) })));
+
+        let rawPrompt = "";
+        try {
+          // 首先尝试包含图像的请求
+          rawPrompt = await textProvider.generateText(promptRequest, {
+            systemPrompt: refVideoSystem,
+            images: visionFrames,
+          });
+        } catch (imageErr: any) {
+          console.warn(`[BatchVideoPrompt] Shot ${shot.sequence} image-based request failed, trying text-only:`, imageErr?.message?.substring(0, 200));
+          
+          // 如果包含图像的请求失败，尝试纯文本模式
+          try {
+            rawPrompt = await textProvider.generateText(promptRequest, {
+              systemPrompt: refVideoSystem,
+              // 不传入images参数
+            });
+            console.log(`[BatchVideoPrompt] Shot ${shot.sequence} text-only request succeeded`);
+          } catch (textErr: any) {
+            console.error(`[BatchVideoPrompt] Shot ${shot.sequence} text-only request also failed:`, textErr?.message?.substring(0, 200));
+            
+            // 如果纯文本也失败，使用备用提示
+            rawPrompt = `基于剧本生成视频提示：${motionContext || shot.prompt || "无描述"}\n时长：${effectiveDuration}秒\n机位：${shot.cameraDirection || "static"}`;
+            console.log(`[BatchVideoPrompt] Shot ${shot.sequence} using fallback prompt`);
+          }
+        }
+        
         const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
         await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
-        console.log(`[BatchVideoPrompt] Shot ${shot.sequence} done (${((Date.now() - shotStart) / 1000).toFixed(1)}s, ${visionFrames.length} frames)`);
+        console.log(`[BatchVideoPrompt] Shot ${shot.sequence} done (${((Date.now() - shotStart) / 1000).toFixed(1)}s, ${visionFrames.length} frames, used fallback: ${rawPrompt.includes("基于剧本生成视频提示") ? "yes" : "no"})`);
         return { shotId: shot.id, status: "ok" };
       } catch (err) {
         console.error(`[BatchVideoPrompt] Shot ${shot.sequence} failed:`, err);

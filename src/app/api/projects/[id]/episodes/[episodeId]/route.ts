@@ -66,7 +66,56 @@ export async function GET(
     )
     .orderBy(desc(storyboardVersions.versionNum));
 
+  // Initial resolvedVersionId (may be updated after auto-fix)
   const resolvedVersionId = versionId ?? allVersions[0]?.id;
+
+  // Debug: check all shots for this project regardless of episode
+  const debugAllShots = await db
+    .select({ id: shots.id, sequence: shots.sequence, versionId: shots.versionId, episodeId: shots.episodeId })
+    .from(shots)
+    .where(eq(shots.projectId, id))
+    .limit(10);
+
+  // Debug: check storyboardVersions
+  const debugVersions = await db
+    .select({ id: storyboardVersions.id, episodeId: storyboardVersions.episodeId, versionNum: storyboardVersions.versionNum })
+    .from(storyboardVersions)
+    .where(eq(storyboardVersions.projectId, id))
+    .limit(10);
+
+  // Debug logging
+  console.log(`[Episode API] projectId=${id}, episodeId=${episodeId}, versionId=${versionId}`);
+  console.log(`[Episode API] allVersions count: ${allVersions.length}`);
+  console.log(`[Episode API] resolvedVersionId=${resolvedVersionId}`);
+  console.log(`[Episode API] debug shots (first 10):`, JSON.stringify(debugAllShots));
+  console.log(`[Episode API] debug versions:`, JSON.stringify(debugVersions));
+
+  // Auto-fix: If this episode has NO versions yet but shots exist with episodeId=null,
+  // update the shots to belong to this episode. This handles legacy data created
+  // when episodeId wasn't properly passed.
+  const needsFix = allVersions.length === 0 && debugAllShots.some(s => s.episodeId === null && debugVersions.length > 0);
+  let effectiveVersionId: string | undefined = resolvedVersionId;
+  if (needsFix) {
+    // Check if the existing version has null episodeId (it's a "project-level" version)
+    const legacyVersion = debugVersions.find(v => v.episodeId === null);
+    if (legacyVersion) {
+      // Update the legacy version to be associated with this episode
+      await db.update(storyboardVersions)
+        .set({ episodeId: episodeId })
+        .where(eq(storyboardVersions.id, legacyVersion.id));
+      console.log(`[Episode API] Updated legacy version ${legacyVersion.id} to episodeId=${episodeId}`);
+
+      // Update all shots for this version to have the episodeId
+      await db.update(shots)
+        .set({ episodeId: episodeId })
+        .where(and(
+          eq(shots.projectId, id),
+          eq(shots.versionId, legacyVersion.id)
+        ));
+      console.log(`[Episode API] Updated shots for version ${legacyVersion.id} to episodeId=${episodeId}`);
+      effectiveVersionId = legacyVersion.id;
+    }
+  }
 
   // Fetch characters linked to this episode via episode_characters table
   const linkedCharIds = await db
@@ -84,7 +133,8 @@ export async function GET(
   // No links = no characters for this episode (user needs to run character extraction)
 
   // Fetch shots for this episode + version
-  const episodeShots = resolvedVersionId
+  // Use effectiveVersionId if set (from auto-fix), otherwise fall back to resolvedVersionId
+  const episodeShots = effectiveVersionId
     ? await db
         .select()
         .from(shots)
@@ -92,11 +142,13 @@ export async function GET(
           and(
             eq(shots.projectId, id),
             eq(shots.episodeId, episodeId),
-            eq(shots.versionId, resolvedVersionId)
+            eq(shots.versionId, effectiveVersionId)
           )
         )
         .orderBy(asc(shots.sequence))
     : [];
+
+  console.log(`[Episode API] episodeShots count: ${episodeShots.length}`);
 
   // Bulk-load ALL shot assets (all versions, not just active) so the UI
   // can render version history arrows and switch between historical fileUrls.
