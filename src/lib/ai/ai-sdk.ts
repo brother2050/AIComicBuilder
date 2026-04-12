@@ -49,13 +49,64 @@ export function extractJSON(text: string): string {
   // Step 4: Remove any remaining problematic Unicode characters
   raw = raw.replace(/[\u007F-\u009F]/g, "");
 
-  // Step 5: Fix unescaped special characters within strings
+  // Step 5: Escape literal newlines inside strings (critical fix for AI output)
+  raw = escapeNewlinesInStrings(raw);
+
+  // Step 6: Fix unescaped special characters within strings
   raw = fixUnescapedCharacters(raw);
 
-  // Step 6: Fix common JSON structural issues from AI output
+  // Step 7: Fix common JSON structural issues from AI output
   raw = fixJSONStructure(raw);
 
   return raw;
+}
+
+/**
+ * Escape literal newlines that appear inside JSON strings.
+ * This handles cases where AI outputs unescaped newlines within quoted values.
+ */
+function escapeNewlinesInStrings(json: string): string {
+  let result = "";
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = 0; i < json.length; i++) {
+    const char = json[i];
+
+    if (escapeNext) {
+      result += char;
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escapeNext = true;
+      result += char;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    // If inside a string and hit a newline, escape it
+    if (inString && (char === "\n" || char === "\r")) {
+      if (char === "\r" && json[i + 1] === "\n") {
+        // Handle \r\n as a single newline
+        result += "\\n";
+        i++; // skip the \n
+      } else {
+        result += "\\n";
+      }
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
 }
 
 /**
