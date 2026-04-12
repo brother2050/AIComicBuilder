@@ -84,6 +84,14 @@ export function createVideoProvider(config: ProviderConfig, uploadDir?: string):
         model: config.modelId,
         ...(uploadDir && { uploadDir }),
       });
+    case "comfyui":
+      return new ComfyUIProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        // For ComfyUI, modelId IS the workflowId
+        workflowId: config.workflowId || config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
     default:
       throw new Error(`Unsupported video protocol: ${config.protocol}`);
   }
@@ -108,4 +116,12 @@ export function resolveVideoProvider(modelConfig?: ModelConfigPayload, uploadDir
     return createVideoProvider(modelConfig.video, uploadDir);
   }
   return getVideoProvider(uploadDir);
+}
+
+/**
+ * Check if the model configuration uses ComfyUI
+ * ComfyUI executes workflows sequentially, so batch operations should be sequential too
+ */
+export function isComfyUIProvider(modelConfig?: ModelConfigPayload): boolean {
+  return modelConfig?.image?.protocol === "comfyui" || modelConfig?.video?.protocol === "comfyui";
 }
