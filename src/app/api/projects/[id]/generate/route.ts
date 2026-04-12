@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { streamText, generateText } from "ai";
 import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
-import type { ProviderConfig } from "@/lib/ai/ai-sdk";
+import type { ProviderConfig as AIProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
 import { projects, episodes, characters, shots, dialogues, storyboardVersions, episodeCharacters, characterRelations } from "@/lib/db/schema";
 import { eq, asc, and, lt, gt, desc, or, isNull, inArray } from "drizzle-orm";
@@ -38,18 +38,9 @@ import {
 } from "@/lib/shot-asset-utils";
 import { buildRefImagePromptsRequest } from "@/lib/ai/prompts/ref-image-prompts";
 import { buildKeyframePromptsRequest } from "@/lib/ai/prompts/keyframe-prompts";
+import { ratioToImageOpts } from "@/lib/ai/image-size";
 
 export const maxDuration = 300;
-
-/** Map user-facing ratio string to ImageOptions fields */
-function ratioToImageOpts(ratio?: string): { aspectRatio?: string; size?: string } {
-  switch (ratio) {
-    case "16:9":  return { aspectRatio: "16:9", size: "2560x1440" };
-    case "9:16":  return { aspectRatio: "9:16", size: "1440x2560" };
-    case "1:1":   return { aspectRatio: "1:1",  size: "2048x2048" };
-    default:      return { aspectRatio: "16:9", size: "2560x1440" };
-  }
-}
 
 /** Fetch characters linked to an episode via episode_characters, or all project characters if no episode. */
 async function getEpisodeCharacters(projectId: string, epId?: string | null) {
@@ -684,11 +675,15 @@ async function handleSingleCharacterImage(
   console.log(`[generate] modelConfig:`, JSON.stringify(modelConfig, null, 2));
   const ai = resolveImageProvider(modelConfig);
   const prompt = buildCharacterTurnaroundPrompt(character.description || character.name, character.name);
+  const imgOpts = ratioToImageOpts(
+    "16:9",
+    modelConfig?.image?.modelId,
+    modelConfig?.image?.baseUrl
+  );
 
   try {
     const imagePath = await ai.generateImage(prompt, {
-      size: "2560x1440",
-      aspectRatio: "16:9",
+      ...imgOpts,
       quality: "hd",
     });
 
@@ -766,6 +761,11 @@ async function handleBatchCharacterImage(
 
   const ai = resolveImageProvider(modelConfig);
   const useSequential = isComfyUIProvider(modelConfig);
+  const imgOpts = ratioToImageOpts(
+    "16:9",
+    modelConfig?.image?.modelId,
+    modelConfig?.image?.baseUrl
+  );
 
   const results: { characterId: string; name: string; imagePath?: string; status: "ok" | "error"; error?: string }[] = [];
 
@@ -777,8 +777,7 @@ async function handleBatchCharacterImage(
       try {
         const prompt = buildCharacterTurnaroundPrompt(character.description || character.name, character.name);
         const imagePath = await ai.generateImage(prompt, {
-          size: "2560x1440",
-          aspectRatio: "16:9",
+          ...imgOpts,
           quality: "hd",
         });
 
@@ -805,8 +804,7 @@ async function handleBatchCharacterImage(
         try {
           const prompt = buildCharacterTurnaroundPrompt(character.description || character.name, character.name);
           const imagePath = await ai.generateImage(prompt, {
-            size: "2560x1440",
-            aspectRatio: "16:9",
+            ...imgOpts,
             quality: "hd",
           });
 
@@ -1266,7 +1264,11 @@ async function handleBatchFrameGenerate(
   episodeId?: string
 ) {
   const batchVersionId = payload?.versionId as string | undefined;
-  const imageOpts = ratioToImageOpts(payload?.ratio as string | undefined);
+  const imageOpts = ratioToImageOpts(
+    payload?.ratio as string | undefined,
+    modelConfig?.image?.modelId,
+    modelConfig?.image?.baseUrl
+  );
   const shotWhereConditions = [eq(shots.projectId, projectId)];
   if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
   if (episodeId) shotWhereConditions.push(eq(shots.episodeId, episodeId));
@@ -1596,7 +1598,11 @@ async function handleSingleFrameGenerate(
   const shotCharRefImages = filteredChars.map((c) => c.referenceImage as string);
 
   const ai = resolveImageProvider(modelConfig, versionedUploadDir);
-  const imageOpts = ratioToImageOpts(payload?.ratio as string | undefined);
+  const imageOpts = ratioToImageOpts(
+    payload?.ratio as string | undefined,
+    modelConfig?.image?.modelId,
+    modelConfig?.image?.baseUrl
+  );
 
   const frameFirstSlots = await resolveSlotContents("frame_generate_first", { userId, projectId });
   const frameLastSlots = await resolveSlotContents("frame_generate_last", { userId, projectId });
@@ -2044,7 +2050,11 @@ async function handleBatchSceneFrame(
 ) {
   const overwrite = payload?.overwrite === true;
   const ratio = (payload?.ratio as string) || "16:9";
-  const imageOpts = ratioToImageOpts(ratio);
+  const imageOpts = ratioToImageOpts(
+    ratio,
+    modelConfig?.image?.modelId,
+    modelConfig?.image?.baseUrl
+  );
   const batchVersionId = payload?.versionId as string | undefined;
 
   const shotWhereConditions = [eq(shots.projectId, projectId)];
@@ -3239,7 +3249,11 @@ async function handleBatchRefImageGenerate(
     for (const entry of pending) {
       try {
         const batchRatio = (payload?.ratio as string) || "16:9";
-        const batchImageOpts = ratioToImageOpts(batchRatio);
+        const batchImageOpts = ratioToImageOpts(
+          batchRatio,
+          modelConfig?.image?.modelId,
+          modelConfig?.image?.baseUrl
+        );
 
         // Scene-only: do NOT inject character references. Scene frames are
         // pure environments; character consistency is handled at the video
@@ -3300,7 +3314,11 @@ async function handleSingleRefImageGenerate(
   console.log(`[SingleRefImage] Shot ${shot.sequence}: generating scene-only ref image "${refImageId}"`);
 
   const ratio = (payload?.ratio as string) || "16:9";
-  const imgOpts = ratioToImageOpts(ratio);
+  const imgOpts = ratioToImageOpts(
+    ratio,
+    modelConfig?.image?.modelId,
+    modelConfig?.image?.baseUrl
+  );
   const imageProvider = resolveImageProvider(modelConfig);
 
   try {
@@ -3594,7 +3612,11 @@ async function handleSingleShotRefImageGenerateAll(
   console.log(`[RefImageGenAll] Shot ${shot.sequence}: using ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ")}`);
 
   const ratio = (payload?.ratio as string) || "16:9";
-  const imgOpts = ratioToImageOpts(ratio);
+  const imgOpts = ratioToImageOpts(
+    ratio,
+    modelConfig?.image?.modelId,
+    modelConfig?.image?.baseUrl
+  );
   const imageProvider = resolveImageProvider(modelConfig);
 
   let generated = 0;

@@ -124,7 +124,8 @@
     "relType_rival": "竞争",
     "relType_stranger": "陌生",
     "relType_neutral": "中立",
-    "relType_对手": "对手"
+    "relType_对手": "对手",
+    "relType_commander": "上下级"
   },
   "shot": {
     "sequence": "第 {number} 个分镜",
