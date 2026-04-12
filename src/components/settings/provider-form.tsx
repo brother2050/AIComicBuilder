@@ -11,13 +11,14 @@ import {
   type Capability,
 } from "@/stores/model-store";
 import { useTranslations } from "next-intl";
-import { Loader2, Download, Plus, Eye, EyeOff, Trash2, Search } from "lucide-react";
+import { Loader2, Download, Plus, Eye, EyeOff, Trash2, Search, Workflow } from "lucide-react";
 
 const DEFAULT_BASE_URLS: Record<Protocol, string> = {
   openai: "https://api.openai.com",
   gemini: "https://generativelanguage.googleapis.com",
   seedance: "https://ark.cn-beijing.volces.com",
   kling: "https://api.klingai.com",
+  comfyui: "http://127.0.0.1:8188",
 };
 
 function getProtocolOptions(capability: Capability): { value: Protocol; label: string }[] {
@@ -32,6 +33,7 @@ function getProtocolOptions(capability: Capability): { value: Protocol; label: s
       { value: "openai", label: "OpenAI" },
       { value: "gemini", label: "Gemini" },
       { value: "kling", label: "Kling" },
+      { value: "comfyui", label: "ComfyUI" },
     ];
   }
   // video
@@ -39,6 +41,7 @@ function getProtocolOptions(capability: Capability): { value: Protocol; label: s
     { value: "seedance", label: "Seedance" },
     { value: "gemini", label: "Gemini (Veo)" },
     { value: "kling", label: "Kling" },
+    { value: "comfyui", label: "ComfyUI" },
   ];
 }
 
@@ -56,8 +59,33 @@ export function ProviderForm({ provider }: ProviderFormProps) {
   const [showKey, setShowKey] = useState(false);
   const [showSecretKey, setShowSecretKey] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
+  const [workflows, setWorkflows] = useState<Array<{ id: string; name: string; workflowType: string }>>([]);
+  const [fetchingWorkflows, setFetchingWorkflows] = useState(false);
 
   const isKling = provider.protocol === "kling";
+  const isComfyUI = provider.protocol === "comfyui";
+
+  // 获取 ComfyUI 工作流列表
+  async function handleFetchWorkflows() {
+    if (!provider.baseUrl) return;
+    setFetchingWorkflows(true);
+    try {
+      const res = await fetch("/api/comfyui/workflows");
+      if (res.ok) {
+        const data = await res.json();
+        // 按类型过滤（image 或 video）
+        const filtered = data.workflows?.filter(
+          (w: { workflowType: string }) =>
+            w.workflowType === provider.capability || w.workflowType === "custom"
+        ) || [];
+        setWorkflows(filtered);
+      }
+    } catch (error) {
+      console.error("Failed to fetch workflows:", error);
+    } finally {
+      setFetchingWorkflows(false);
+    }
+  }
 
   async function handleFetchModels() {
     setFetching(true);
@@ -233,6 +261,52 @@ export function ProviderForm({ provider }: ProviderFormProps) {
 
       {/* Divider */}
       <div className="border-t border-[--border-subtle]" />
+
+      {/* ComfyUI Workflow Selector */}
+      {isComfyUI && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs flex items-center gap-1.5">
+              <Workflow className="h-3 w-3" />
+              Workflow
+            </Label>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleFetchWorkflows}
+              disabled={fetchingWorkflows}
+            >
+              {fetchingWorkflows ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              Fetch
+            </Button>
+          </div>
+
+          {workflows.length > 0 ? (
+            <div className="rounded-lg border border-[--border-subtle] overflow-hidden">
+              <select
+                value={provider.workflowId || ""}
+                onChange={(e) => updateProvider(provider.id, { workflowId: e.target.value || undefined })}
+                className="w-full h-9 px-3 bg-transparent text-sm outline-none cursor-pointer"
+              >
+                <option value="">-- Select Workflow --</option>
+                {workflows.map((wf) => (
+                  <option key={wf.id} value={wf.id}>
+                    {wf.name} ({wf.workflowType})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <p className="text-xs text-[--text-muted]">
+              Click Fetch to load workflows from ComfyUI
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Row 3: Models */}
       <div className="space-y-3">

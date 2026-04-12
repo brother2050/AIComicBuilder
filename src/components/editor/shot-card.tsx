@@ -629,6 +629,7 @@ export function ShotCard({
       apiKey: provider.apiKey,
       secretKey: provider.secretKey,
       modelId: modelRef.modelId,
+      workflowId: provider.workflowId,
     };
   }
 

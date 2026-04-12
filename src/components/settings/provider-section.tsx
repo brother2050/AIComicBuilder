@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { useModelStore, type Capability, type Protocol } from "@/stores/model-store";
 import { ProviderCard } from "@/components/settings/provider-card";
 import { ProviderForm } from "@/components/settings/provider-form";
-import { Plus } from "lucide-react";
+import { Plus, Workflow } from "lucide-react";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 
 interface ProviderSectionProps {
   capability: Capability;
@@ -14,6 +15,7 @@ interface ProviderSectionProps {
   icon: React.ReactNode;
   defaultProtocol: Protocol;
   defaultBaseUrl: string;
+  showComfyUIWorkflowsLink?: boolean;
 }
 
 export function ProviderSection({
@@ -22,6 +24,7 @@ export function ProviderSection({
   icon,
   defaultProtocol,
   defaultBaseUrl,
+  showComfyUIWorkflowsLink,
 }: ProviderSectionProps) {
   const t = useTranslations("settings");
   const { providers, addProvider, removeProvider } = useModelStore();
@@ -57,10 +60,20 @@ export function ProviderSection({
           {icon}
           {label}
         </h3>
-        <Button size="sm" variant="outline" onClick={handleAdd}>
-          <Plus className="h-3.5 w-3.5" />
-          {t("addProvider")}
-        </Button>
+        <div className="flex items-center gap-2">
+          {showComfyUIWorkflowsLink && (
+            <Link href="/comfyui-workflows">
+              <Button size="sm" variant="ghost">
+                <Workflow className="h-3.5 w-3.5" />
+                Workflows
+              </Button>
+            </Link>
+          )}
+          <Button size="sm" variant="outline" onClick={handleAdd}>
+            <Plus className="h-3.5 w-3.5" />
+            {t("addProvider")}
+          </Button>
+        </div>
       </div>
 
       {sectionProviders.length === 0 ? (

@@ -89,6 +89,18 @@ export function DefaultModelPicker() {
     }[] = [];
     for (const p of providers) {
       if (p.capability !== capability) continue;
+      
+      // ComfyUI providers use workflows instead of models
+      if (p.protocol === "comfyui") {
+        result.push({
+          providerId: p.id,
+          providerName: p.name,
+          modelId: p.workflowId || "default",
+          modelName: p.workflowId ? `Workflow: ${p.workflowId.slice(0, 8)}...` : "No workflow selected",
+        });
+        continue;
+      }
+      
       for (const m of p.models) {
         if (!m.checked) continue;
         result.push({

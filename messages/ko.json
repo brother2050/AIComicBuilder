@@ -122,7 +122,8 @@
     "relType_mentor": "사제",
     "relType_rival": "경쟁",
     "relType_stranger": "타인",
-    "relType_neutral": "중립"
+    "relType_neutral": "중립",
+    "relType_对手": "상대방"
   },
   "shot": {
     "sequence": "샷 {number}",

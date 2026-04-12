@@ -4,6 +4,7 @@ import { SeedanceProvider } from "./providers/seedance";
 import { VeoProvider } from "./providers/veo";
 import { KlingImageProvider } from "./providers/kling-image";
 import { KlingVideoProvider } from "./providers/kling-video";
+import { ComfyUIProvider } from "./providers/comfyui";
 import { getAIProvider, getVideoProvider } from "./index";
 import type { AIProvider, VideoProvider } from "./types";
 
@@ -13,6 +14,7 @@ interface ProviderConfig {
   apiKey: string;
   secretKey?: string;
   modelId: string;
+  workflowId?: string;
 }
 
 export interface ModelConfigPayload {
@@ -43,6 +45,14 @@ export function createAIProvider(config: ProviderConfig, uploadDir?: string): AI
         secretKey: config.secretKey,
         baseUrl: config.baseUrl,
         model: config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    case "comfyui":
+      return new ComfyUIProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        // For ComfyUI, modelId IS the workflowId
+        workflowId: config.workflowId || config.modelId,
         ...(uploadDir && { uploadDir }),
       });
     default:

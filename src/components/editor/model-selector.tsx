@@ -2,34 +2,36 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useModelStore, type Capability, type ModelRef } from "@/stores/model-store";
-import { Type, ImageIcon, VideoIcon, ChevronDown, Check } from "lucide-react";
+import { Type, ImageIcon, VideoIcon, ChevronDown, Check, Settings } from "lucide-react";
 
 const ICONS: Record<Capability, React.ReactNode> = {
   text: <Type className="h-3 w-3" />,
   image: <ImageIcon className="h-3 w-3" />,
   video: <VideoIcon className="h-3 w-3" />,
+  custom: <Settings className="h-3 w-3" />,
 };
 
 const COLORS: Record<Capability, string> = {
   text: "bg-blue-500/10 text-blue-600",
   image: "bg-emerald-500/10 text-emerald-600",
   video: "bg-purple-500/10 text-purple-600",
+  custom: "bg-orange-500/10 text-orange-600",
 };
 
-const SETTERS: Record<Capability, "setDefaultTextModel" | "setDefaultImageModel" | "setDefaultVideoModel"> = {
+const SETTERS: Record<Exclude<Capability, "custom">, "setDefaultTextModel" | "setDefaultImageModel" | "setDefaultVideoModel"> = {
   text: "setDefaultTextModel",
   image: "setDefaultImageModel",
   video: "setDefaultVideoModel",
 };
 
-const GETTERS: Record<Capability, "defaultTextModel" | "defaultImageModel" | "defaultVideoModel"> = {
+const GETTERS: Record<Exclude<Capability, "custom">, "defaultTextModel" | "defaultImageModel" | "defaultVideoModel"> = {
   text: "defaultTextModel",
   image: "defaultImageModel",
   video: "defaultVideoModel",
 };
 
 interface InlineModelPickerProps {
-  capability: Capability;
+  capability: Exclude<Capability, "custom">;
   value?: ModelRef | null;
   onChange?: (ref: ModelRef) => void;
 }
@@ -49,6 +51,18 @@ export function InlineModelPicker({ capability, value: controlledValue, onChange
     const result: { providerId: string; providerName: string; modelId: string; modelName: string }[] = [];
     for (const p of providers) {
       if (p.capability !== capability) continue;
+      
+      // ComfyUI providers use workflows instead of models
+      if (p.protocol === "comfyui") {
+        result.push({
+          providerId: p.id,
+          providerName: p.name,
+          modelId: p.workflowId || "default",
+          modelName: p.workflowId ? `Workflow: ${p.workflowId.slice(0, 8)}...` : "No workflow selected",
+        });
+        continue;
+      }
+      
       for (const m of p.models) {
         if (!m.checked) continue;
         result.push({

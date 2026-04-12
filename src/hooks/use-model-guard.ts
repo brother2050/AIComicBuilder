@@ -7,7 +7,7 @@ import { useModelStore } from "@/stores/model-store";
 import { toast } from "sonner";
 import type { Capability } from "@/stores/model-store";
 
-const messageKeys: Record<Capability, string> = {
+const messageKeys: Record<Exclude<Capability, "custom">, string> = {
   text: "notConfiguredText",
   image: "notConfiguredImage",
   video: "notConfiguredVideo",
@@ -19,7 +19,7 @@ const messageKeys: Record<Capability, string> = {
  * Returns false (and shows a toast) if the model is not configured.
  * Returns true if the model is configured and the action can proceed.
  */
-export function useModelGuard(capability: Capability): () => boolean {
+export function useModelGuard(capability: Exclude<Capability, "custom">): () => boolean {
   const router = useRouter();
   const locale = useLocale();
   const t = useTranslations("settings");

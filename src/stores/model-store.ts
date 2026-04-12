@@ -2,8 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { id as genId } from "@/lib/id";
 
-export type Protocol = "openai" | "gemini" | "seedance" | "kling";
-export type Capability = "text" | "image" | "video";
+export type Protocol = "openai" | "gemini" | "seedance" | "kling" | "comfyui";
+export type Capability = "text" | "image" | "video" | "custom";
 
 export interface Model {
   id: string;
@@ -20,6 +20,8 @@ export interface Provider {
   apiKey: string;
   secretKey?: string;
   models: Model[];
+  /** ComfyUI workflow ID for image/video generation */
+  workflowId?: string;
 }
 
 export interface ModelRef {
@@ -29,8 +31,8 @@ export interface ModelRef {
 
 export interface ModelConfig {
   text: { protocol: Protocol; baseUrl: string; apiKey: string; secretKey?: string; modelId: string } | null;
-  image: { protocol: Protocol; baseUrl: string; apiKey: string; secretKey?: string; modelId: string } | null;
-  video: { protocol: Protocol; baseUrl: string; apiKey: string; secretKey?: string; modelId: string } | null;
+  image: { protocol: Protocol; baseUrl: string; apiKey: string; secretKey?: string; modelId: string; workflowId?: string } | null;
+  video: { protocol: Protocol; baseUrl: string; apiKey: string; secretKey?: string; modelId: string; workflowId?: string } | null;
 }
 
 interface ModelStore {
@@ -153,6 +155,8 @@ export const useModelStore = create<ModelStore>()(
             apiKey: provider.apiKey,
             secretKey: provider.secretKey,
             modelId: ref.modelId,
+            // For ComfyUI, modelId IS the workflowId
+            workflowId: provider.protocol === "comfyui" ? ref.modelId : provider.workflowId,
           };
         }
         return {

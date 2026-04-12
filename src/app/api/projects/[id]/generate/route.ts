@@ -127,6 +127,15 @@ interface ModelConfig {
   video?: ProviderConfig | null;
 }
 
+interface ProviderConfig {
+  protocol: string;
+  baseUrl: string;
+  apiKey: string;
+  secretKey?: string;
+  modelId: string;
+  workflowId?: string;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -661,10 +670,6 @@ async function handleSingleCharacterImage(
     return NextResponse.json({ error: "No characterId provided" }, { status: 400 });
   }
 
-  if (!modelConfig?.image) {
-    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
-  }
-
   const [character] = await db
     .select()
     .from(characters)
@@ -674,6 +679,7 @@ async function handleSingleCharacterImage(
     return NextResponse.json({ error: "Character not found" }, { status: 404 });
   }
 
+  console.log(`[generate] modelConfig:`, JSON.stringify(modelConfig, null, 2));
   const ai = resolveImageProvider(modelConfig);
   const prompt = buildCharacterTurnaroundPrompt(character.description || character.name, character.name);
 
@@ -738,13 +744,6 @@ async function handleBatchCharacterImage(
   modelConfig?: ModelConfig,
   episodeId?: string
 ) {
-  if (!modelConfig?.image) {
-    return NextResponse.json(
-      { error: "No image model configured" },
-      { status: 400 }
-    );
-  }
-
   let allCharacters: typeof characters.$inferSelect[];
   if (episodeId) {
     const linkedIds = await db
@@ -1224,13 +1223,6 @@ async function handleBatchFrameGenerate(
   modelConfig?: ModelConfig,
   episodeId?: string
 ) {
-  if (!modelConfig?.image) {
-    return NextResponse.json(
-      { error: "No image model configured" },
-      { status: 400 }
-    );
-  }
-
   const batchVersionId = payload?.versionId as string | undefined;
   const imageOpts = ratioToImageOpts(payload?.ratio as string | undefined);
   const shotWhereConditions = [eq(shots.projectId, projectId)];
@@ -1438,9 +1430,6 @@ async function handleSingleFrameGenerate(
   const shotId = payload?.shotId as string;
   if (!shotId) {
     return NextResponse.json({ error: "No shotId provided" }, { status: 400 });
-  }
-  if (!modelConfig?.image) {
-    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
   }
 
   const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
@@ -1785,9 +1774,6 @@ async function handleSingleSceneFrame(
   if (!shotId) {
     return NextResponse.json({ error: "No shotId provided" }, { status: 400 });
   }
-  if (!modelConfig?.image) {
-    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
-  }
 
   const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
   if (!shot) {
@@ -1863,10 +1849,6 @@ async function handleBatchSceneFrame(
   modelConfig?: ModelConfig,
   episodeId?: string
 ) {
-  if (!modelConfig?.image) {
-    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
-  }
-
   const overwrite = payload?.overwrite === true;
   const ratio = (payload?.ratio as string) || "16:9";
   const imageOpts = ratioToImageOpts(ratio);
@@ -1965,9 +1947,6 @@ async function handleSingleReferenceVideo(
   }
   if (!modelConfig?.video) {
     return NextResponse.json({ error: "No video model configured" }, { status: 400 });
-  }
-  if (!modelConfig?.image) {
-    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
   }
 
   const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
@@ -2166,9 +2145,6 @@ async function handleBatchReferenceVideo(
 ) {
   if (!modelConfig?.video) {
     return NextResponse.json({ error: "No video model configured" }, { status: 400 });
-  }
-  if (!modelConfig?.image) {
-    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
   }
 
   const batchVersionId = payload?.versionId as string | undefined;
@@ -2836,10 +2812,6 @@ async function handleBatchRefImageGenerate(
   modelConfig?: ModelConfig,
   episodeId?: string
 ) {
-  if (!modelConfig?.image) {
-    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
-  }
-
   const batchVersionId = payload?.versionId as string | undefined;
   const shotWhereConditions = [eq(shots.projectId, projectId)];
   if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
@@ -2921,9 +2893,6 @@ async function handleSingleRefImageGenerate(
 
   if (!shotId || !refImageId) {
     return NextResponse.json({ error: "Missing shotId or refImageId" }, { status: 400 });
-  }
-  if (!modelConfig?.image) {
-    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
   }
 
   const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));

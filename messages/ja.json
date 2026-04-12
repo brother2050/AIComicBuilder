@@ -122,7 +122,8 @@
     "relType_mentor": "師弟",
     "relType_rival": "ライバル",
     "relType_stranger": "他人",
-    "relType_neutral": "中立"
+    "relType_neutral": "中立",
+    "relType_对手": "对手"
   },
   "shot": {
     "sequence": "ショット {number}",
