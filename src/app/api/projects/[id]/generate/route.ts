@@ -39,6 +39,7 @@ import {
 import { buildRefImagePromptsRequest } from "@/lib/ai/prompts/ref-image-prompts";
 import { buildKeyframePromptsRequest } from "@/lib/ai/prompts/keyframe-prompts";
 import { ratioToImageOpts } from "@/lib/ai/image-size";
+import { pMapLimited, KEYFRAME_PROMPTS_CONCURRENCY, VIDEO_PROMPT_CONCURRENCY } from "@/lib/concurrency";
 
 export const maxDuration = 300;
 
@@ -2920,15 +2921,13 @@ async function handleBatchVideoPrompt(
   const refVideoSystem = await resolvePrompt("ref_video_prompt", { userId, projectId });
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
 
-  console.log(`[BatchVideoPrompt] Processing ${eligible.length} shots (${batchShots.length} total, ${batchCharacters.length} chars, mode=${batchGenMode})`);
+  console.log(`[BatchVideoPrompt] Processing ${eligible.length} shots (${batchShots.length} total, ${batchCharacters.length} chars, mode=${batchGenMode}, concurrency=${VIDEO_PROMPT_CONCURRENCY})`);
   const bvpStartTime = Date.now();
 
-  // Sequential execution to avoid rate limits
+  // Concurrent execution with configurable limit to avoid rate limits
   const results: Array<{ shotId: string; status: string }> = [];
-  let doneCount = 0;
 
-  for (const shot of eligible) {
-    doneCount++;
+  await pMapLimited(eligible, async (shot, index) => {
     try {
       const shotLegacy = batchShotsLegacy.get(shot.id);
       const shotStart = Date.now();
@@ -3031,13 +3030,13 @@ async function handleBatchVideoPrompt(
       
       const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
       await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
-      console.log(`[BatchVideoPrompt] Shot ${shot.sequence} done (${((Date.now() - shotStart) / 1000).toFixed(1)}s, ${doneCount}/${eligible.length})`);
+      console.log(`[BatchVideoPrompt] Shot ${shot.sequence} done (${((Date.now() - shotStart) / 1000).toFixed(1)}s, ${index + 1}/${eligible.length})`);
       results.push({ shotId: shot.id, status: "ok" });
     } catch (err) {
-      console.error(`[BatchVideoPrompt] Shot ${shot.sequence} failed (${doneCount}/${eligible.length}):`, err);
+      console.error(`[BatchVideoPrompt] Shot ${shot.sequence} failed (${index + 1}/${eligible.length}):`, err);
       results.push({ shotId: shot.id, status: "error" });
     }
-  }
+  }, VIDEO_PROMPT_CONCURRENCY);
 
   const okCount = results.filter((r) => r.status === "ok").length;
   const errCount = results.filter((r) => r.status === "error").length;
@@ -3645,14 +3644,16 @@ async function handleGenerateKeyframePrompts(
     projectId,
   });
 
-  // Sequential per-shot generation: each shot is one LLM call, run one by one to avoid rate limits.
+  // Concurrent per-shot generation with configurable limit to avoid rate limits.
   const total = allShots.length;
-  let doneCount = 0;
   let updatedCount = 0;
   const failed: Array<{ seq: number; err: string }> = [];
-  console.log(`[GenerateKeyframePrompts] Starting sequential generation: 0/${total}`);
+  const progressMap = new Map<string, { done: number; total: number }>();
 
-  for (const shot of allShots) {
+  console.log(`[GenerateKeyframePrompts] Starting limited concurrent generation (concurrency=${KEYFRAME_PROMPTS_CONCURRENCY}): 0/${total}`);
+
+  // Process shots with concurrency limit
+  const results = await pMapLimited(allShots, async (shot, index) => {
     try {
       const basePromptRequest = buildKeyframePromptsRequest(
         [{
@@ -3711,18 +3712,18 @@ async function handleGenerateKeyframePrompts(
         characters: charsForShot,
       });
       updatedCount++;
-      doneCount++;
-      console.log(`[GenerateKeyframePrompts] ✓ shot ${shot.sequence} (${doneCount}/${total})`);
+      console.log(`[GenerateKeyframePrompts] ✓ shot ${shot.sequence} (${index + 1}/${total})`);
+      return { success: true, shot };
     } catch (err) {
-      doneCount++;
       failed.push({ seq: shot.sequence, err: String(err) });
-      console.warn(`[GenerateKeyframePrompts] ✗ shot ${shot.sequence} (${doneCount}/${total}): ${String(err)}`);
+      console.warn(`[GenerateKeyframePrompts] ✗ shot ${shot.sequence} (${index + 1}/${total}): ${String(err)}`);
+      return { success: false, shot };
     }
-  }
+  }, KEYFRAME_PROMPTS_CONCURRENCY);
 
   if (failed.length > 0) {
     console.warn(`[GenerateKeyframePrompts] ${failed.length} shots failed:`, failed);
   }
-  console.log(`[GenerateKeyframePrompts] Updated ${updatedCount}/${allShots.length} (sequential)`);
-  return NextResponse.json({ updatedCount, totalShots: allShots.length });
+  console.log(`[GenerateKeyframePrompts] Updated ${updatedCount}/${allShots.length} (concurrency=${KEYFRAME_PROMPTS_CONCURRENCY})`);
+  return NextResponse.json({ updatedCount, totalShots: allShots.length, failedCount: failed.length });
 }
