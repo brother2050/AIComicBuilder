@@ -1254,302 +1254,207 @@ IMPORTANT: Keep the same scene, characters, and narrative intent. Only rephrase 
   }
 }
 
-// --- batch_frame_generate: sequential frame generation with continuity chain ---
+// --- batch_frame_generate: sequential frame generation with SSE progress streaming ---
 
-async function handleBatchFrameGenerate(
+function handleBatchFrameGenerate(
   projectId: string,
   userId: string,
   payload?: Record<string, unknown>,
   modelConfig?: ModelConfig,
   episodeId?: string
-) {
+): Response {
   const batchVersionId = payload?.versionId as string | undefined;
-  const imageOpts = ratioToImageOpts(
-    payload?.ratio as string | undefined,
-    modelConfig?.image?.modelId,
-    modelConfig?.image?.baseUrl
-  );
-  const shotWhereConditions = [eq(shots.projectId, projectId)];
-  if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
-  if (episodeId) shotWhereConditions.push(eq(shots.episodeId, episodeId));
-  const allShots = await db
-    .select()
-    .from(shots)
-    .where(and(...shotWhereConditions))
-    .orderBy(asc(shots.sequence));
-
-  if (allShots.length === 0) {
-    return NextResponse.json({ results: [], message: "No shots found" });
-  }
-  const allShotsLegacy = await loadShotLegacyViewsBatch(allShots.map((s) => s.id));
-
-  const versionedUploadDir = batchVersionId
-    ? await getVersionedUploadDir(batchVersionId)
-    : process.env.UPLOAD_DIR || "./uploads";
-
-  // Fetch only characters linked to this episode
-  let frameCharacters: typeof characters.$inferSelect[];
-  if (episodeId) {
-    const linkedIds = await db
-      .select({ characterId: episodeCharacters.characterId })
-      .from(episodeCharacters)
-      .where(eq(episodeCharacters.episodeId, episodeId));
-    frameCharacters = linkedIds.length > 0
-      ? await db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)))
-      : [];
-  } else {
-    frameCharacters = await db.select().from(characters).where(eq(characters.projectId, projectId));
-  }
-
-  const characterDescriptions = frameCharacters
-    .map((c) => `${c.name}: ${c.description}`)
-    .join("\n");
-
-  const charsWithImages = frameCharacters.filter((c) => c.referenceImage);
-
-  const ai = resolveImageProvider(modelConfig, versionedUploadDir);
-  const results: Array<{ shotId: string; sequence: number; status: string; firstFrame?: string; lastFrame?: string; error?: string }> = [];
-
   const overwrite = payload?.overwrite === true;
-  const needProcess = allShots.filter((s) => {
-    const v = allShotsLegacy.get(s.id);
-    return overwrite || !v?.firstFrame || !v?.lastFrame;
-  });
-  const skipCount = allShots.length - needProcess.length;
 
-  // Check if using ComfyUI (sequential execution required)
-  const useSequential = isComfyUIProvider(modelConfig);
-  console.log(`[BatchFrameGenerate] Total: ${allShots.length} shots, need: ${needProcess.length}, skip: ${skipCount}, characters: ${frameCharacters.length}`);
-  console.log(`[BatchFrameGenerate] Execution mode: ${useSequential ? "SEQUENTIAL (ComfyUI)" : "PARALLEL"}`);
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encode = (data: unknown) => {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`));
+      };
 
-  const frameFirstSlots = await resolveSlotContents("frame_generate_first", { userId, projectId });
-  const frameLastSlots = await resolveSlotContents("frame_generate_last", { userId, projectId });
+      const sendProgress = (done: number, total: number, status: string, shotId?: string, error?: string) => {
+        encode({ type: "progress", done, total, status, shotId, error });
+      };
 
-  const total = allShots.length;
-  let doneCount = 0;
+      const sendComplete = (results: unknown[]) => {
+        encode({ type: "complete", results });
+      };
 
-  if (useSequential) {
-    // ── Sequential per-shot generation (for ComfyUI) ──
-    // ComfyUI executes workflows one at a time; parallel execution causes timeout.
-    console.log(`[BatchFrameGenerate] Starting sequential generation: 0/${total}`);
-
-    for (const shot of allShots) {
-      const shotLegacy = allShotsLegacy.get(shot.id);
-
-      if (!overwrite && shotLegacy?.firstFrame && shotLegacy?.lastFrame) {
-        doneCount++;
-        console.log(`[BatchFrameGenerate] ⊙ shot ${shot.sequence} skipped (${doneCount}/${total})`);
-        results.push({ shotId: shot.id, sequence: shot.sequence, status: "skipped" });
-        continue;
-      }
-
-      const startTime = Date.now();
       try {
-        await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
+        const imageOpts = ratioToImageOpts(
+          payload?.ratio as string | undefined,
+          modelConfig?.image?.modelId,
+          modelConfig?.image?.baseUrl
+        );
+        const shotWhereConditions = [eq(shots.projectId, projectId)];
+        if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
+        if (episodeId) shotWhereConditions.push(eq(shots.episodeId, episodeId));
+        const allShots = await db
+          .select()
+          .from(shots)
+          .where(and(...shotWhereConditions))
+          .orderBy(asc(shots.sequence));
 
-        const ffAssetExisting = await getActiveAsset(shot.id, "first_frame", 0);
-        const lfAssetExisting = await getActiveAsset(shot.id, "last_frame", 0);
-        const shotCharNameSet = new Set<string>([
-          ...(ffAssetExisting?.characters ?? []),
-          ...(lfAssetExisting?.characters ?? []),
-        ]);
-        const filteredChars = shotCharNameSet.size > 0
-          ? charsWithImages.filter((c) => shotCharNameSet.has(c.name))
-          : charsWithImages;
-        const shotCharRefImages = filteredChars.map((c) => c.referenceImage!);
-        const shotCharRefLabels = filteredChars.map((c) => c.name);
-        const shotCharsForPersist = filteredChars.length > 0 ? filteredChars.map((c) => c.name) : undefined;
+        if (allShots.length === 0) {
+          sendComplete([]);
+          controller.close();
+          return;
+        }
+        const allShotsLegacy = await loadShotLegacyViewsBatch(allShots.map((s) => s.id));
 
-        const firstPrompt = buildFirstFramePrompt({
-          sceneDescription: shot.prompt || "",
-          startFrameDesc: shotLegacy?.startFrameDesc || shot.prompt || "",
-          characterDescriptions,
-          slotContents: frameFirstSlots,
-        });
-        const firstFramePath = await ai.generateImage(firstPrompt, {
-          ...imageOpts,
-          quality: "hd",
-          referenceImages: shotCharRefImages,
-          referenceLabels: shotCharRefLabels,
-        });
+        const versionedUploadDir = batchVersionId
+          ? await getVersionedUploadDir(batchVersionId)
+          : process.env.UPLOAD_DIR || "./uploads";
 
-        const lastPrompt = buildLastFramePrompt({
-          sceneDescription: shot.prompt || "",
-          endFrameDesc: shotLegacy?.endFrameDesc || shot.prompt || "",
-          characterDescriptions,
-          firstFramePath,
-          slotContents: frameLastSlots,
-        });
-        const lastFramePath = await ai.generateImage(lastPrompt, {
-          ...imageOpts,
-          quality: "hd",
-          referenceImages: [firstFramePath, ...shotCharRefImages],
-          referenceLabels: ["首帧/First Frame", ...shotCharRefLabels],
-        });
+        let frameCharacters: typeof characters.$inferSelect[];
+        if (episodeId) {
+          const linkedIds = await db
+            .select({ characterId: episodeCharacters.characterId })
+            .from(episodeCharacters)
+            .where(eq(episodeCharacters.episodeId, episodeId));
+          frameCharacters = linkedIds.length > 0
+            ? await db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)))
+            : [];
+        } else {
+          frameCharacters = await db.select().from(characters).where(eq(characters.projectId, projectId));
+        }
 
-        await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
+        const characterDescriptions = frameCharacters
+          .map((c) => `${c.name}: ${c.description}`)
+          .join("\n");
 
-        if (ffAssetExisting) await patchAsset(ffAssetExisting.id, { fileUrl: firstFramePath, status: "completed" });
-        else
-          await insertAssetVersion({
-            shotId: shot.id, type: "first_frame", sequenceInType: 0,
-            prompt: shotLegacy?.startFrameDesc ?? "", fileUrl: firstFramePath,
-            status: "completed", characters: shotCharsForPersist,
-          });
-        if (lfAssetExisting) await patchAsset(lfAssetExisting.id, { fileUrl: lastFramePath, status: "completed" });
-        else
-          await insertAssetVersion({
-            shotId: shot.id, type: "last_frame", sequenceInType: 0,
-            prompt: shotLegacy?.endFrameDesc ?? "", fileUrl: lastFramePath,
-            status: "completed", characters: shotCharsForPersist,
-          });
+        const charsWithImages = frameCharacters.filter((c) => c.referenceImage);
+        const ai = resolveImageProvider(modelConfig, versionedUploadDir);
+        const results: Array<{ shotId: string; sequence: number; status: string; firstFrame?: string; lastFrame?: string; error?: string }> = [];
 
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        doneCount++;
-        console.log(`[BatchFrameGenerate] ✓ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`);
+        const frameFirstSlots = await resolveSlotContents("frame_generate_first", { userId, projectId });
+        const frameLastSlots = await resolveSlotContents("frame_generate_last", { userId, projectId });
 
-        results.push({
-          shotId: shot.id,
-          sequence: shot.sequence,
-          status: "ok",
-          firstFrame: firstFramePath,
-          lastFrame: lastFramePath,
-        });
+        const total = allShots.length;
+        let doneCount = 0;
+
+        // Sequential execution for all providers to support streaming progress
+        console.log(`[BatchFrameGenerate] Starting sequential generation with SSE: 0/${total}`);
+
+        for (const shot of allShots) {
+          const shotLegacy = allShotsLegacy.get(shot.id);
+
+          if (!overwrite && shotLegacy?.firstFrame && shotLegacy?.lastFrame) {
+            doneCount++;
+            console.log(`[BatchFrameGenerate] ⊙ shot ${shot.sequence} skipped (${doneCount}/${total})`);
+            results.push({ shotId: shot.id, sequence: shot.sequence, status: "skipped" });
+            sendProgress(doneCount, total, "skipped", shot.id);
+            continue;
+          }
+
+          const startTime = Date.now();
+          try {
+            await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
+
+            const ffAssetExisting = await getActiveAsset(shot.id, "first_frame", 0);
+            const lfAssetExisting = await getActiveAsset(shot.id, "last_frame", 0);
+            const shotCharNameSet = new Set<string>([
+              ...(ffAssetExisting?.characters ?? []),
+              ...(lfAssetExisting?.characters ?? []),
+            ]);
+            const filteredChars = shotCharNameSet.size > 0
+              ? charsWithImages.filter((c) => shotCharNameSet.has(c.name))
+              : charsWithImages;
+            const shotCharRefImages = filteredChars.map((c) => c.referenceImage!);
+            const shotCharRefLabels = filteredChars.map((c) => c.name);
+            const shotCharsForPersist = filteredChars.length > 0 ? filteredChars.map((c) => c.name) : undefined;
+
+            const firstPrompt = buildFirstFramePrompt({
+              sceneDescription: shot.prompt || "",
+              startFrameDesc: shotLegacy?.startFrameDesc || shot.prompt || "",
+              characterDescriptions,
+              slotContents: frameFirstSlots,
+            });
+            const firstFramePath = await ai.generateImage(firstPrompt, {
+              ...imageOpts,
+              quality: "hd",
+              referenceImages: shotCharRefImages,
+              referenceLabels: shotCharRefLabels,
+            });
+
+            const lastPrompt = buildLastFramePrompt({
+              sceneDescription: shot.prompt || "",
+              endFrameDesc: shotLegacy?.endFrameDesc || shot.prompt || "",
+              characterDescriptions,
+              firstFramePath,
+              slotContents: frameLastSlots,
+            });
+            const lastFramePath = await ai.generateImage(lastPrompt, {
+              ...imageOpts,
+              quality: "hd",
+              referenceImages: [firstFramePath, ...shotCharRefImages],
+              referenceLabels: ["首帧/First Frame", ...shotCharRefLabels],
+            });
+
+            await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
+
+            if (ffAssetExisting) await patchAsset(ffAssetExisting.id, { fileUrl: firstFramePath, status: "completed" });
+            else
+              await insertAssetVersion({
+                shotId: shot.id, type: "first_frame", sequenceInType: 0,
+                prompt: shotLegacy?.startFrameDesc ?? "", fileUrl: firstFramePath,
+                status: "completed", characters: shotCharsForPersist,
+              });
+            if (lfAssetExisting) await patchAsset(lfAssetExisting.id, { fileUrl: lastFramePath, status: "completed" });
+            else
+              await insertAssetVersion({
+                shotId: shot.id, type: "last_frame", sequenceInType: 0,
+                prompt: shotLegacy?.endFrameDesc ?? "", fileUrl: lastFramePath,
+                status: "completed", characters: shotCharsForPersist,
+              });
+
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            doneCount++;
+            console.log(`[BatchFrameGenerate] ✓ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`);
+
+            results.push({
+              shotId: shot.id,
+              sequence: shot.sequence,
+              status: "ok",
+              firstFrame: firstFramePath,
+              lastFrame: lastFramePath,
+            });
+            sendProgress(doneCount, total, "ok", shot.id);
+          } catch (err) {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            doneCount++;
+            console.error(`[BatchFrameGenerate] ✗ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s:`, err);
+            await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
+            results.push({
+              shotId: shot.id,
+              sequence: shot.sequence,
+              status: "error",
+              error: extractErrorMessage(err),
+            });
+            sendProgress(doneCount, total, "error", shot.id, extractErrorMessage(err));
+          }
+        }
+
+        const okCount = results.filter((r) => r.status === "ok").length;
+        const errCount = results.filter((r) => r.status === "error").length;
+        console.log(`[BatchFrameGenerate] Done: ${okCount} ok, ${errCount} errors`);
+        sendComplete(results);
       } catch (err) {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        doneCount++;
-        console.error(`[BatchFrameGenerate] ✗ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s:`, err);
-        await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
-        results.push({
-          shotId: shot.id,
-          sequence: shot.sequence,
-          status: "error",
-          error: extractErrorMessage(err),
-        });
+        console.error("[BatchFrameGenerate] Stream error:", err);
+        encode({ type: "error", error: extractErrorMessage(err) });
+      } finally {
+        controller.close();
       }
-    }
-  } else {
-    // ── Concurrent per-shot generation (for non-ComfyUI providers) ──
-    console.log(`[BatchFrameGenerate] Starting concurrent generation: 0/${total}`);
+    },
+  });
 
-    const settled = await Promise.allSettled(
-      allShots.map(async (shot) => {
-        const shotLegacy = allShotsLegacy.get(shot.id);
-
-        if (!overwrite && shotLegacy?.firstFrame && shotLegacy?.lastFrame) {
-          doneCount++;
-          console.log(`[BatchFrameGenerate] ⊙ shot ${shot.sequence} skipped (${doneCount}/${total})`);
-          return {
-            shotId: shot.id,
-            sequence: shot.sequence,
-            status: "skipped" as const,
-          };
-        }
-
-        const startTime = Date.now();
-        try {
-          await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
-
-          const ffAssetExisting = await getActiveAsset(shot.id, "first_frame", 0);
-          const lfAssetExisting = await getActiveAsset(shot.id, "last_frame", 0);
-          const shotCharNameSet = new Set<string>([
-            ...(ffAssetExisting?.characters ?? []),
-            ...(lfAssetExisting?.characters ?? []),
-          ]);
-          const filteredChars = shotCharNameSet.size > 0
-            ? charsWithImages.filter((c) => shotCharNameSet.has(c.name))
-            : charsWithImages;
-          const shotCharRefImages = filteredChars.map((c) => c.referenceImage!);
-          const shotCharRefLabels = filteredChars.map((c) => c.name);
-          const shotCharsForPersist = filteredChars.length > 0 ? filteredChars.map((c) => c.name) : undefined;
-
-          const firstPrompt = buildFirstFramePrompt({
-            sceneDescription: shot.prompt || "",
-            startFrameDesc: shotLegacy?.startFrameDesc || shot.prompt || "",
-            characterDescriptions,
-            slotContents: frameFirstSlots,
-          });
-          const firstFramePath = await ai.generateImage(firstPrompt, {
-            ...imageOpts,
-            quality: "hd",
-            referenceImages: shotCharRefImages,
-            referenceLabels: shotCharRefLabels,
-          });
-
-          const lastPrompt = buildLastFramePrompt({
-            sceneDescription: shot.prompt || "",
-            endFrameDesc: shotLegacy?.endFrameDesc || shot.prompt || "",
-            characterDescriptions,
-            firstFramePath,
-            slotContents: frameLastSlots,
-          });
-          const lastFramePath = await ai.generateImage(lastPrompt, {
-            ...imageOpts,
-            quality: "hd",
-            referenceImages: [firstFramePath, ...shotCharRefImages],
-            referenceLabels: ["首帧/First Frame", ...shotCharRefLabels],
-          });
-
-          await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
-
-          if (ffAssetExisting) await patchAsset(ffAssetExisting.id, { fileUrl: firstFramePath, status: "completed" });
-          else
-            await insertAssetVersion({
-              shotId: shot.id, type: "first_frame", sequenceInType: 0,
-              prompt: shotLegacy?.startFrameDesc ?? "", fileUrl: firstFramePath,
-              status: "completed", characters: shotCharsForPersist,
-            });
-          if (lfAssetExisting) await patchAsset(lfAssetExisting.id, { fileUrl: lastFramePath, status: "completed" });
-          else
-            await insertAssetVersion({
-              shotId: shot.id, type: "last_frame", sequenceInType: 0,
-              prompt: shotLegacy?.endFrameDesc ?? "", fileUrl: lastFramePath,
-              status: "completed", characters: shotCharsForPersist,
-            });
-
-          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          doneCount++;
-          console.log(`[BatchFrameGenerate] ✓ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`);
-
-          return {
-            shotId: shot.id,
-            sequence: shot.sequence,
-            status: "ok" as const,
-            firstFrame: firstFramePath,
-            lastFrame: lastFramePath,
-          };
-        } catch (err) {
-          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          doneCount++;
-          console.error(`[BatchFrameGenerate] ✗ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s:`, err);
-          await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
-          return {
-            shotId: shot.id,
-            sequence: shot.sequence,
-            status: "error" as const,
-            error: extractErrorMessage(err),
-          };
-        }
-      })
-    );
-
-    for (const r of settled) {
-      if (r.status === "fulfilled") results.push(r.value);
-      else
-        results.push({
-          shotId: "",
-          sequence: -1,
-          status: "error",
-          error: String(r.reason),
-        });
-    }
-  }
-
-  const okCount = results.filter((r) => r.status === "ok").length;
-  const errCount = results.filter((r) => r.status === "error").length;
-  console.log(`[BatchFrameGenerate] Done: ${okCount} ok, ${errCount} errors, ${skipCount} skipped`);
-
-  return NextResponse.json({ results });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+  });
 }
 
 // --- single_frame_generate: synchronous frame generation for one shot ---
@@ -3018,118 +2923,121 @@ async function handleBatchVideoPrompt(
   console.log(`[BatchVideoPrompt] Processing ${eligible.length} shots (${batchShots.length} total, ${batchCharacters.length} chars, mode=${batchGenMode})`);
   const bvpStartTime = Date.now();
 
-  const results = await Promise.all(
-    eligible.map(async (shot) => {
+  // Sequential execution to avoid rate limits
+  const results: Array<{ shotId: string; status: string }> = [];
+  let doneCount = 0;
+
+  for (const shot of eligible) {
+    doneCount++;
+    try {
+      const shotLegacy = batchShotsLegacy.get(shot.id);
+      const shotStart = Date.now();
+      const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
+      // Keyframe: first + last frames. Reference: ALL scene reference frames (ordered).
+      const visionFrames: string[] = [];
+      let sceneMetaList: Array<{ sceneName?: string } | null> = [];
+      if (batchGenMode === "reference") {
+        const sceneAssets = (shotLegacy?.referenceImages ?? [])
+          .filter((r) => r.fileUrl)
+          .sort((a, b) => a.sequenceInType - b.sequenceInType);
+        for (const r of sceneAssets) {
+          visionFrames.push(r.fileUrl as string);
+          sceneMetaList.push((r.meta as { sceneName?: string } | null) ?? null);
+        }
+        if (visionFrames.length === 0 && shotLegacy?.sceneRefFrame) {
+          visionFrames.push(shotLegacy.sceneRefFrame);
+          sceneMetaList.push(null);
+        }
+      } else {
+        if (shotLegacy?.firstFrame) visionFrames.push(shotLegacy.firstFrame);
+        if (shotLegacy?.lastFrame) visionFrames.push(shotLegacy.lastFrame);
+        if (visionFrames.length === 0 && shotLegacy?.sceneRefFrame) visionFrames.push(shotLegacy.sceneRefFrame);
+        sceneMetaList = visionFrames.map(() => null);
+      }
+      const shotDialogues = await db
+        .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
+        .from(dialogues)
+        .where(eq(dialogues.shotId, shot.id))
+        .orderBy(asc(dialogues.sequence));
+      const videoContextForDialogue = shot.videoScript || shot.motionScript || shot.prompt || "";
+
+      const dialogueList = shotDialogues.map((d) => {
+        const char = batchCharacters.find((c) => c.id === d.characterId);
+        const characterName = char?.name ?? "Unknown";
+        const onScreen = isCharacterOnScreen(characterName, videoContextForDialogue, shotLegacy?.startFrameDesc ?? null);
+        const visualHint = onScreen ? (char?.visualHint || undefined) : undefined;
+        return {
+          characterName,
+          text: d.text,
+          offscreen: !onScreen,
+          visualHint,
+        };
+      });
+
+      const motionContext = shot.videoScript || shot.motionScript || shot.prompt || "";
+      // Filter characters to those declared on this shot's reference assets
+      const shotCharNameSetBVP = new Set<string>();
+      for (const r of shotLegacy?.referenceImages ?? []) {
+        for (const n of r.characters ?? []) shotCharNameSetBVP.add(n);
+      }
+      const batchCharsWithRefs = batchCharacters.filter(
+        (c) => !!c.referenceImage && (shotCharNameSetBVP.size === 0 || shotCharNameSetBVP.has(c.name))
+      );
+      const characterRefInfos = batchCharsWithRefs.map((c, i) => ({
+        name: c.name,
+        index: i + 1,
+        visualHint: c.visualHint,
+      }));
+      const sceneFrameInfos = visionFrames.map((_, i) => {
+        const name = sceneMetaList[i]?.sceneName || (visionFrames.length > 1 ? `场景-${i + 1}` : `场景`);
+        return { label: name, index: batchCharsWithRefs.length + i + 1 };
+      });
+      const promptRequest = buildRefVideoPromptRequest({
+        motionScript: motionContext,
+        cameraDirection: shot.cameraDirection || "static",
+        duration: effectiveDuration,
+        characters: characterRefInfos,
+        sceneFrames: sceneFrameInfos,
+        dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+      });
+      // Debug: log vision frames info
+      console.log(`[BatchVideoPrompt] Shot ${shot.sequence} visionFrames:`, visionFrames.map((f) => ({ path: f, exists: path.resolve(f).startsWith("/") && fs.existsSync(path.resolve(f)) })));
+
+      let rawPrompt = "";
       try {
-        const shotLegacy = batchShotsLegacy.get(shot.id);
-        const shotStart = Date.now();
-        const effectiveDuration = Math.min(shot.duration ?? 10, videoMaxDuration);
-        // Keyframe: first + last frames. Reference: ALL scene reference frames (ordered).
-        const visionFrames: string[] = [];
-        let sceneMetaList: Array<{ sceneName?: string } | null> = [];
-        if (batchGenMode === "reference") {
-          const sceneAssets = (shotLegacy?.referenceImages ?? [])
-            .filter((r) => r.fileUrl)
-            .sort((a, b) => a.sequenceInType - b.sequenceInType);
-          for (const r of sceneAssets) {
-            visionFrames.push(r.fileUrl as string);
-            sceneMetaList.push((r.meta as { sceneName?: string } | null) ?? null);
-          }
-          if (visionFrames.length === 0 && shotLegacy?.sceneRefFrame) {
-            visionFrames.push(shotLegacy.sceneRefFrame);
-            sceneMetaList.push(null);
-          }
-        } else {
-          if (shotLegacy?.firstFrame) visionFrames.push(shotLegacy.firstFrame);
-          if (shotLegacy?.lastFrame) visionFrames.push(shotLegacy.lastFrame);
-          if (visionFrames.length === 0 && shotLegacy?.sceneRefFrame) visionFrames.push(shotLegacy.sceneRefFrame);
-          sceneMetaList = visionFrames.map(() => null);
-        }
-        const shotDialogues = await db
-          .select({ text: dialogues.text, characterId: dialogues.characterId, sequence: dialogues.sequence })
-          .from(dialogues)
-          .where(eq(dialogues.shotId, shot.id))
-          .orderBy(asc(dialogues.sequence));
-        const videoContextForDialogue = shot.videoScript || shot.motionScript || shot.prompt || "";
-
-        const dialogueList = shotDialogues.map((d) => {
-          const char = batchCharacters.find((c) => c.id === d.characterId);
-          const characterName = char?.name ?? "Unknown";
-          const onScreen = isCharacterOnScreen(characterName, videoContextForDialogue, shotLegacy?.startFrameDesc ?? null);
-          const visualHint = onScreen ? (char?.visualHint || undefined) : undefined;
-          return {
-            characterName,
-            text: d.text,
-            offscreen: !onScreen,
-            visualHint,
-          };
+        // 首先尝试包含图像的请求
+        rawPrompt = await textProvider.generateText(promptRequest, {
+          systemPrompt: refVideoSystem,
+          images: visionFrames,
         });
-
-        const motionContext = shot.videoScript || shot.motionScript || shot.prompt || "";
-        // Filter characters to those declared on this shot's reference assets
-        const shotCharNameSetBVP = new Set<string>();
-        for (const r of shotLegacy?.referenceImages ?? []) {
-          for (const n of r.characters ?? []) shotCharNameSetBVP.add(n);
-        }
-        const batchCharsWithRefs = batchCharacters.filter(
-          (c) => !!c.referenceImage && (shotCharNameSetBVP.size === 0 || shotCharNameSetBVP.has(c.name))
-        );
-        const characterRefInfos = batchCharsWithRefs.map((c, i) => ({
-          name: c.name,
-          index: i + 1,
-          visualHint: c.visualHint,
-        }));
-        const sceneFrameInfos = visionFrames.map((_, i) => {
-          const name = sceneMetaList[i]?.sceneName || (visionFrames.length > 1 ? `场景-${i + 1}` : `场景`);
-          return { label: name, index: batchCharsWithRefs.length + i + 1 };
-        });
-        const promptRequest = buildRefVideoPromptRequest({
-          motionScript: motionContext,
-          cameraDirection: shot.cameraDirection || "static",
-          duration: effectiveDuration,
-          characters: characterRefInfos,
-          sceneFrames: sceneFrameInfos,
-          dialogues: dialogueList.length > 0 ? dialogueList : undefined,
-        });
-        // Debug: log vision frames info
-        console.log(`[BatchVideoPrompt] Shot ${shot.sequence} visionFrames:`, visionFrames.map((f) => ({ path: f, exists: path.resolve(f).startsWith("/") && fs.existsSync(path.resolve(f)) })));
-
-        let rawPrompt = "";
+      } catch (imageErr: any) {
+        console.warn(`[BatchVideoPrompt] Shot ${shot.sequence} image-based request failed, trying text-only:`, imageErr?.message?.substring(0, 200));
+        
+        // 如果包含图像的请求失败，尝试纯文本模式
         try {
-          // 首先尝试包含图像的请求
           rawPrompt = await textProvider.generateText(promptRequest, {
             systemPrompt: refVideoSystem,
-            images: visionFrames,
+            // 不传入images参数
           });
-        } catch (imageErr: any) {
-          console.warn(`[BatchVideoPrompt] Shot ${shot.sequence} image-based request failed, trying text-only:`, imageErr?.message?.substring(0, 200));
+          console.log(`[BatchVideoPrompt] Shot ${shot.sequence} text-only request succeeded`);
+        } catch (textErr: any) {
+          console.error(`[BatchVideoPrompt] Shot ${shot.sequence} text-only request also failed:`, textErr?.message?.substring(0, 200));
           
-          // 如果包含图像的请求失败，尝试纯文本模式
-          try {
-            rawPrompt = await textProvider.generateText(promptRequest, {
-              systemPrompt: refVideoSystem,
-              // 不传入images参数
-            });
-            console.log(`[BatchVideoPrompt] Shot ${shot.sequence} text-only request succeeded`);
-          } catch (textErr: any) {
-            console.error(`[BatchVideoPrompt] Shot ${shot.sequence} text-only request also failed:`, textErr?.message?.substring(0, 200));
-            
-            // 如果纯文本也失败，使用备用提示
-            rawPrompt = `基于剧本生成视频提示：${motionContext || shot.prompt || "无描述"}\n时长：${effectiveDuration}秒\n机位：${shot.cameraDirection || "static"}`;
-            console.log(`[BatchVideoPrompt] Shot ${shot.sequence} using fallback prompt`);
-          }
+          // 如果纯文本也失败，使用备用提示
+          rawPrompt = `基于剧本生成视频提示：${motionContext || shot.prompt || "无描述"}\n时长：${effectiveDuration}秒\n机位：${shot.cameraDirection || "static"}`;
+          console.log(`[BatchVideoPrompt] Shot ${shot.sequence} using fallback prompt`);
         }
-        
-        const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
-        await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
-        console.log(`[BatchVideoPrompt] Shot ${shot.sequence} done (${((Date.now() - shotStart) / 1000).toFixed(1)}s, ${visionFrames.length} frames, used fallback: ${rawPrompt.includes("基于剧本生成视频提示") ? "yes" : "no"})`);
-        return { shotId: shot.id, status: "ok" };
-      } catch (err) {
-        console.error(`[BatchVideoPrompt] Shot ${shot.sequence} failed:`, err);
-        return { shotId: shot.id, status: "error" };
       }
-    })
-  );
+      
+      const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
+      await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
+      console.log(`[BatchVideoPrompt] Shot ${shot.sequence} done (${((Date.now() - shotStart) / 1000).toFixed(1)}s, ${doneCount}/${eligible.length})`);
+      results.push({ shotId: shot.id, status: "ok" });
+    } catch (err) {
+      console.error(`[BatchVideoPrompt] Shot ${shot.sequence} failed (${doneCount}/${eligible.length}):`, err);
+      results.push({ shotId: shot.id, status: "error" });
+    }
+  }
 
   const okCount = results.filter((r) => r.status === "ok").length;
   const errCount = results.filter((r) => r.status === "error").length;
@@ -3737,87 +3645,84 @@ async function handleGenerateKeyframePrompts(
     projectId,
   });
 
-  // Concurrent per-shot generation: each shot is one LLM call, all run in parallel.
+  // Sequential per-shot generation: each shot is one LLM call, run one by one to avoid rate limits.
   const total = allShots.length;
   let doneCount = 0;
-  console.log(`[GenerateKeyframePrompts] Starting concurrent generation: 0/${total}`);
-  const results = await Promise.allSettled(
-    allShots.map(async (shot) => {
-      try {
-        const basePromptRequest = buildKeyframePromptsRequest(
-          [{
-            sequence: shot.sequence,
-            prompt: shot.prompt || "",
-            motionScript: shot.motionScript,
-            cameraDirection: shot.cameraDirection,
-          }],
-          projectCharacters.map((c) => ({
-            name: c.name,
-            description: c.description,
-            visualHint: c.visualHint,
-          })),
-          visualStyle
-        );
-        const promptRequest = kfRelationsText
-          ? basePromptRequest + kfRelationsText
-          : basePromptRequest;
+  let updatedCount = 0;
+  const failed: Array<{ seq: number; err: string }> = [];
+  console.log(`[GenerateKeyframePrompts] Starting sequential generation: 0/${total}`);
 
-        const result = await textProvider.generateText(promptRequest, {
-          systemPrompt: keyframeSystemPrompt,
-          temperature: 0.5,
-        });
+  for (const shot of allShots) {
+    try {
+      const basePromptRequest = buildKeyframePromptsRequest(
+        [{
+          sequence: shot.sequence,
+          prompt: shot.prompt || "",
+          motionScript: shot.motionScript,
+          cameraDirection: shot.cameraDirection,
+        }],
+        projectCharacters.map((c) => ({
+          name: c.name,
+          description: c.description,
+          visualHint: c.visualHint,
+        })),
+        visualStyle
+      );
+      const promptRequest = kfRelationsText
+        ? basePromptRequest + kfRelationsText
+        : basePromptRequest;
 
-        const jsonMatch = result.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) {
-          throw new Error(`Shot ${shot.sequence}: invalid JSON response`);
-        }
-        const parsed = JSON.parse(jsonMatch[0]) as Array<{
-          shotSequence: number;
-          characters?: string[];
-          prompts: string[];
-        }>;
-        const entry = parsed.find((e) => e.shotSequence === shot.sequence) || parsed[0];
-        if (!entry || !Array.isArray(entry.prompts) || entry.prompts.length < 2) {
-          throw new Error(`Shot ${shot.sequence}: expected 2 prompts (first/last frame)`);
-        }
+      const result = await textProvider.generateText(promptRequest, {
+        systemPrompt: keyframeSystemPrompt,
+        temperature: 0.5,
+      });
 
-        // Use LLM-provided per-shot character list (only visible chars in this shot).
-        // Fall back to empty array if LLM omitted the field — never default to all chars.
-        const charsForShot = Array.isArray(entry.characters) ? entry.characters : [];
-        await insertAssetVersion({
-          shotId: shot.id,
-          type: "first_frame",
-          sequenceInType: 0,
-          prompt: entry.prompts[0],
-          status: "pending",
-          characters: charsForShot,
-        });
-        await insertAssetVersion({
-          shotId: shot.id,
-          type: "last_frame",
-          sequenceInType: 0,
-          prompt: entry.prompts[1],
-          status: "pending",
-          characters: charsForShot,
-        });
-        doneCount++;
-        console.log(`[GenerateKeyframePrompts] ✓ shot ${shot.sequence} (${doneCount}/${total})`);
-        return shot.sequence;
-      } catch (err) {
-        doneCount++;
-        console.warn(`[GenerateKeyframePrompts] ✗ shot ${shot.sequence} (${doneCount}/${total}): ${String(err)}`);
-        throw err;
+      const jsonMatch = result.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        throw new Error(`Shot ${shot.sequence}: invalid JSON response`);
       }
-    })
-  );
+      const parsed = JSON.parse(jsonMatch[0]) as Array<{
+        shotSequence: number;
+        characters?: string[];
+        prompts: string[];
+      }>;
+      const entry = parsed.find((e) => e.shotSequence === shot.sequence) || parsed[0];
+      if (!entry || !Array.isArray(entry.prompts) || entry.prompts.length < 2) {
+        throw new Error(`Shot ${shot.sequence}: expected 2 prompts (first/last frame)`);
+      }
 
-  const updatedCount = results.filter((r) => r.status === "fulfilled").length;
-  const failed = results
-    .map((r, i) => (r.status === "rejected" ? { seq: allShots[i].sequence, err: String(r.reason) } : null))
-    .filter(Boolean);
+      // Use LLM-provided per-shot character list (only visible chars in this shot).
+      // Fall back to empty array if LLM omitted the field — never default to all chars.
+      const charsForShot = Array.isArray(entry.characters) ? entry.characters : [];
+      await insertAssetVersion({
+        shotId: shot.id,
+        type: "first_frame",
+        sequenceInType: 0,
+        prompt: entry.prompts[0],
+        status: "pending",
+        characters: charsForShot,
+      });
+      await insertAssetVersion({
+        shotId: shot.id,
+        type: "last_frame",
+        sequenceInType: 0,
+        prompt: entry.prompts[1],
+        status: "pending",
+        characters: charsForShot,
+      });
+      updatedCount++;
+      doneCount++;
+      console.log(`[GenerateKeyframePrompts] ✓ shot ${shot.sequence} (${doneCount}/${total})`);
+    } catch (err) {
+      doneCount++;
+      failed.push({ seq: shot.sequence, err: String(err) });
+      console.warn(`[GenerateKeyframePrompts] ✗ shot ${shot.sequence} (${doneCount}/${total}): ${String(err)}`);
+    }
+  }
+
   if (failed.length > 0) {
     console.warn(`[GenerateKeyframePrompts] ${failed.length} shots failed:`, failed);
   }
-  console.log(`[GenerateKeyframePrompts] Updated ${updatedCount}/${allShots.length} shots (concurrent)`);
+  console.log(`[GenerateKeyframePrompts] Updated ${updatedCount}/${allShots.length} (sequential)`);
   return NextResponse.json({ updatedCount, totalShots: allShots.length });
 }

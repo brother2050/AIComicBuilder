@@ -252,17 +252,74 @@ export default function EpisodeStoryboardPage() {
           episodeId: useProjectStore.getState().currentEpisodeId,
         }),
       });
-      const data = await response.json() as { results: Array<{ shotId?: string; status: string }> };
-      const failedIds = (data.results || []).filter((r) => r.status === "error").map((r) => r.shotId!).filter(Boolean);
-      const totalProcessed = data.results?.length || targets.length;
-      setBatchProgress({ total: totalProcessed, completed: totalProcessed, failed: failedIds });
 
-      if (failedIds.length > 0) {
-        setLastFailedShots(failedIds);
-        toast.error(`${failedIds.length}/${totalProcessed} shots failed`);
+      // Handle SSE stream for progress updates
+      if (response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        const failedIds: string[] = [];
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === "progress") {
+                setBatchProgress((prev) => {
+                  if (!prev) return null;
+                  const newFailed = data.status === "error" && data.shotId
+                    ? [...prev.failed, data.shotId]
+                    : prev.failed;
+                  return {
+                    ...prev,
+                    completed: data.done,
+                    failed: newFailed,
+                  };
+                });
+              } else if (data.type === "complete") {
+                const results = data.results || [];
+                const errors = results.filter((r: any) => r.status === "error").map((r: any) => r.shotId);
+                const okCount = results.filter((r: any) => r.status === "ok").length;
+                const errCount = errors.length;
+
+                setBatchProgress((prev) => prev ? { ...prev, completed: data.done } : null);
+
+                if (errCount > 0) {
+                  setLastFailedShots(errors);
+                  toast.error(`${errCount}/${results.length} shots failed`);
+                } else {
+                  setLastFailedShots([]);
+                  toast.success(`All ${okCount} shots completed`);
+                }
+              } else if (data.type === "error") {
+                toast.error(data.error || "Generation failed");
+              }
+            } catch (e) {
+              // Ignore parse errors for incomplete JSON
+            }
+          }
+        }
       } else {
-        setLastFailedShots([]);
-        toast.success(`All ${totalProcessed} shots completed`);
+        // Fallback for non-streaming response
+        const data = await response.json() as { results: Array<{ shotId?: string; status: string }> };
+        const failedIds = (data.results || []).filter((r) => r.status === "error").map((r) => r.shotId!).filter(Boolean);
+        const totalProcessed = data.results?.length || targets.length;
+        setBatchProgress({ total: totalProcessed, completed: totalProcessed, failed: failedIds });
+
+        if (failedIds.length > 0) {
+          setLastFailedShots(failedIds);
+          toast.error(`${failedIds.length}/${totalProcessed} shots failed`);
+        } else {
+          setLastFailedShots([]);
+          toast.success(`All ${totalProcessed} shots completed`);
+        }
       }
     } catch (err) {
       console.error("Batch frame generate error:", err);
