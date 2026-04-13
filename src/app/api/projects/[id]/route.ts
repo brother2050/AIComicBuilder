@@ -1,9 +1,26 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, episodes, characters, shots, dialogues, storyboardVersions } from "@/lib/db/schema";
-import { eq, asc, and, desc } from "drizzle-orm";
+import {
+  projects,
+  episodes,
+  characters,
+  shots,
+  dialogues,
+  storyboardVersions,
+  shotAssets,
+  promptTemplates,
+  importLogs,
+  moodBoardImages,
+  characterRelations,
+  characterCostumes,
+  scenes,
+  shotActions,
+} from "@/lib/db/schema";
+import { eq, asc, and, desc, inArray } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { markDownstreamStale } from "@/lib/staleness";
+import * as fs from "fs";
+import * as path from "path";
 
 async function resolveProject(id: string, userId: string) {
   const [project] = await db
@@ -190,6 +207,128 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // 1. Collect all shot IDs first (need for shot_assets cleanup)
+  const projectShots = await db
+    .select({ id: shots.id })
+    .from(shots)
+    .where(eq(shots.projectId, id));
+
+  // 2. Collect all episode IDs
+  const projectEpisodes = await db
+    .select({ id: episodes.id })
+    .from(episodes)
+    .where(eq(episodes.projectId, id));
+
+  // 3. Collect all character IDs
+  const projectCharacters = await db
+    .select({ id: characters.id, referenceImage: characters.referenceImage })
+    .from(characters)
+    .where(eq(characters.projectId, id));
+
+  // 4. Delete in dependency order (most tables have cascade, but we delete explicitly for safety)
+
+  // 4.1 Delete prompt_templates with project scope
+  await db.delete(promptTemplates).where(
+    eq(promptTemplates.projectId, id)
+  );
+
+  // 4.2 Delete import_logs
+  await db.delete(importLogs).where(eq(importLogs.projectId, id));
+
+  // 4.3 Delete mood_board_images
+  await db.delete(moodBoardImages).where(eq(moodBoardImages.projectId, id));
+
+  // 4.4 Delete shot_actions (depends on shots)
+  if (projectShots.length > 0) {
+    await db.delete(shotActions).where(
+      inArray(shotActions.shotId, projectShots.map((s) => s.id))
+    );
+  }
+
+  // 4.5 Delete shot_assets (depends on shots)
+  if (projectShots.length > 0) {
+    await db.delete(shotAssets).where(
+      inArray(shotAssets.shotId, projectShots.map((s) => s.id))
+    );
+  }
+
+  // 4.6 Delete dialogues (depends on shots)
+  if (projectShots.length > 0) {
+    await db.delete(dialogues).where(
+      inArray(dialogues.shotId, projectShots.map((s) => s.id))
+    );
+  }
+
+  // 4.7 Delete shots
+  await db.delete(shots).where(eq(shots.projectId, id));
+
+  // 4.8 Delete scenes (depends on episodes)
+  if (projectEpisodes.length > 0) {
+    await db.delete(scenes).where(
+      inArray(scenes.episodeId, projectEpisodes.map((e) => e.id))
+    );
+  }
+
+  // 4.9 Delete character_costumes (depends on characters)
+  if (projectCharacters.length > 0) {
+    await db.delete(characterCostumes).where(
+      inArray(characterCostumes.characterId, projectCharacters.map((c) => c.id))
+    );
+  }
+
+  // 4.10 Delete character_relations
+  await db.delete(characterRelations).where(eq(characterRelations.projectId, id));
+
+  // 4.11 Delete characters
+  await db.delete(characters).where(eq(characters.projectId, id));
+
+  // 4.12 Delete episodes
+  await db.delete(episodes).where(eq(episodes.projectId, id));
+
+  // 4.13 Delete storyboard_versions
+  await db.delete(storyboardVersions).where(eq(storyboardVersions.projectId, id));
+
+  // 5. Delete project files (images, videos)
+  try {
+    const uploadDir = process.env.UPLOAD_DIR || "./uploads";
+    const projectUploadDir = path.join(uploadDir, "projects", id);
+
+    if (fs.existsSync(projectUploadDir)) {
+      fs.rmSync(projectUploadDir, { recursive: true, force: true });
+      console.log(`[ProjectDelete] Deleted project files: ${projectUploadDir}`);
+    }
+
+    // Also check for mood board images in the main uploads directory
+    const moodBoardEntries = await db
+      .select({ imageUrl: moodBoardImages.imageUrl })
+      .from(moodBoardImages)
+      .where(eq(moodBoardImages.projectId, id));
+
+    for (const entry of moodBoardEntries) {
+      if (entry.imageUrl) {
+        const fullPath = path.join(uploadDir, entry.imageUrl.replace(/^\//, ""));
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath);
+        }
+      }
+    }
+
+    // Also delete character reference images
+    for (const char of projectCharacters) {
+      if (char.referenceImage) {
+        const fullPath = path.join(uploadDir, char.referenceImage.replace(/^\//, ""));
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[ProjectDelete] Error deleting project files:`, err);
+    // Don't fail the request if file deletion fails
+  }
+
+  // 6. Delete the project itself
   await db.delete(projects).where(eq(projects.id, id));
+
   return new NextResponse(null, { status: 204 });
 }
