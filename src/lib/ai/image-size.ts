@@ -91,9 +91,9 @@ export const IMAGE_SIZE_CONSTRAINTS: Record<string, ImageSizeConstraints> = {
     alignment: 16,
     maxPixels: 2 ** 21,
     defaultSizes: {
-      "16:9": "1024x576",
-      "9:16": "576x1024",
-      "1:1": "1024x1024",
+      "16:9": "2560x1440",
+      "9:16": "1440x2560",
+      "1:1": "2048x2048",
     },
     presets: ["1024x1024", "768x1344", "864x1152", "1344x768", "1152x864", "1440x720", "720x1440"],
   },
