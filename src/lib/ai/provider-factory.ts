@@ -5,6 +5,7 @@ import { VeoProvider } from "./providers/veo";
 import { KlingImageProvider } from "./providers/kling-image";
 import { KlingVideoProvider } from "./providers/kling-video";
 import { ComfyUIProvider } from "./providers/comfyui";
+import { SiliconFlowProvider } from "./providers/siliconflow";
 import { getAIProvider, getVideoProvider } from "./index";
 import type { AIProvider, VideoProvider } from "./types";
 
@@ -53,6 +54,13 @@ export function createAIProvider(config: ProviderConfig, uploadDir?: string): AI
         baseUrl: config.baseUrl,
         // For ComfyUI, modelId IS the workflowId
         workflowId: config.workflowId || config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    case "siliconflow":
+      return new SiliconFlowProvider({
+        apiKey: config.apiKey,
+        baseURL: config.baseUrl,
+        model: config.modelId,
         ...(uploadDir && { uploadDir }),
       });
     default:

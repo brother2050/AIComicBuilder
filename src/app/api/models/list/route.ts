@@ -82,6 +82,12 @@ export async function POST(request: Request) {
       });
     }
 
+    if (body.protocol === "comfyui") {
+      return NextResponse.json({
+        models: [],
+      });
+    }
+
     if (!body.baseUrl) {
       return NextResponse.json({ error: "Base URL is required" }, { status: 400 });
     }

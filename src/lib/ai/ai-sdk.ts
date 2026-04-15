@@ -25,6 +25,16 @@ export function createLanguageModel(config: ProviderConfig): LanguageModel {
       });
       return provider(config.modelId);
     }
+    case "siliconflow": {
+      // SiliconFlow API is fully compatible with OpenAI API format
+      // Returns standard LanguageModel, no special handling needed
+      // JSON extraction (extractJSON) works identically to OpenAI
+      const provider = createOpenAI({
+        apiKey: config.apiKey,
+        baseURL: config.baseUrl,
+      });
+      return provider.chat(config.modelId);
+    }
     default:
       throw new Error(`Unsupported protocol: ${config.protocol}`);
   }
@@ -49,13 +59,19 @@ export function extractJSON(text: string): string {
   // Step 4: Remove any remaining problematic Unicode characters
   raw = raw.replace(/[\u007F-\u009F]/g, "");
 
-  // Step 5: Escape literal newlines inside strings (critical fix for AI output)
+  // Step 5: Fix Chinese punctuation that might break JSON
+  // Replace Chinese quotes with ASCII quotes
+  raw = raw.replace(/[""]/g, '"').replace(/['']/g, "'");
+  // Replace Chinese colon with ASCII colon
+  raw = raw.replace(/：/g, ':');
+
+  // Step 6: Escape literal newlines inside strings (critical fix for AI output)
   raw = escapeNewlinesInStrings(raw);
 
-  // Step 6: Fix unescaped special characters within strings
+  // Step 7: Fix unescaped special characters within strings
   raw = fixUnescapedCharacters(raw);
 
-  // Step 7: Fix common JSON structural issues from AI output
+  // Step 8: Fix common JSON structural issues from AI output
   raw = fixJSONStructure(raw);
 
   return raw;
@@ -162,6 +178,16 @@ function fixUnescapedCharacters(json: string): string {
  */
 function fixJSONStructure(json: string): string {
   let result = json;
+
+  // Fix Chinese punctuation that might break JSON
+  // Replace Chinese quotes with ASCII quotes
+  result = result.replace(/[""]/g, '"').replace(/['']/g, "'");
+  // Replace Chinese colon with ASCII colon
+  result = result.replace(/：/g, ':');
+  // Replace Chinese comma with ASCII comma
+  result = result.replace(/，/g, ',');
+  // Replace Chinese period with ASCII period (but be careful with decimal points)
+  result = result.replace(/。/g, '.');
 
   // Fix trailing commas before } or ]
   result = result.replace(/,(\s*[}\]])/g, "$1");

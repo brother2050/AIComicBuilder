@@ -529,10 +529,10 @@ async function handleCharacterExtract(
     prompt: buildCharacterExtractPrompt(script),
   });
 
-  const parsed = JSON.parse(extractJSON(text));
+  console.log("[CharacterExtract] Raw AI response:\n", text);
+  console.log("[CharacterExtract] Response length:", text.length);
 
-  // Support both formats: new { characters, relationships } and legacy array
-  const extracted: Array<{
+  let extracted: Array<{
     name: string;
     description: string;
     visualHint?: string;
@@ -540,13 +540,70 @@ async function handleCharacterExtract(
     heightCm?: number;
     bodyType?: string;
     performanceStyle?: string;
-  }> = Array.isArray(parsed) ? parsed : (parsed.characters || []);
-  const extractedRelations: Array<{
+  }> = [];
+  let extractedRelations: Array<{
     characterA: string;
     characterB: string;
     relationType: string;
     description?: string;
-  }> = Array.isArray(parsed) ? [] : (parsed.relationships || []);
+  }> = [];
+
+  try {
+    const extractedJSON = extractJSON(text);
+    console.log("[CharacterExtract] Extracted JSON:\n", extractedJSON);
+    const parsed = JSON.parse(extractedJSON);
+
+    // Support both formats: new { characters, relationships } and legacy array
+    extracted = Array.isArray(parsed) ? parsed : (parsed.characters || []);
+    extractedRelations = Array.isArray(parsed) ? [] : (parsed.relationships || []);
+  } catch (error) {
+    console.error("[CharacterExtract] JSON parse error:", error);
+    console.error("[CharacterExtract] Failed to parse text:", text.substring(0, 1000));
+    
+    // Fallback: try to extract character names using regex if JSON parsing fails
+    // Look for patterns like: "角色": "张三" or "name": "李四"
+    const nameMatches = text.match(/["']?(?:角色|name|character|姓名)["']?\s*[:：]\s*["']([^"']+)["']/gi);
+    if (nameMatches && nameMatches.length > 0) {
+      console.log("[CharacterExtract] Fallback: extracted character names:", nameMatches);
+      extracted = nameMatches
+        .map((match) => {
+          // Extract the name from the match
+          const nameMatch = match.match(/["']([^"']+)["']$/);
+          if (nameMatch && nameMatch[1]) {
+            const name = nameMatch[1].trim();
+            // Filter out invalid names (too short, contains JSON syntax, etc.)
+            if (name.length >= 2 && 
+                !name.includes('{') && 
+                !name.includes('}') && 
+                !name.includes('[') && 
+                !name.includes(']') &&
+                !name.startsWith('"') &&
+                !name.startsWith("'") &&
+                !name.includes('character') &&
+                !name.includes('角色') &&
+                !name.includes('色彩调色板')) {
+              return {
+                name,
+                description: `角色 ${name}`,
+              };
+            }
+          }
+          return null;
+        })
+        .filter((char): char is NonNullable<typeof char> => char !== null);
+      
+      console.log("[CharacterExtract] Fallback: valid characters extracted:", extracted.length);
+    }
+  }
+
+  // Additional validation: ensure we have valid character data
+  if (extracted.length === 0) {
+    console.warn("[CharacterExtract] No valid characters extracted, skipping character processing");
+    return NextResponse.json({ 
+      error: "Failed to extract characters from script. Please try again or add characters manually.",
+      details: "AI response could not be parsed as valid JSON"
+    }, { status: 400 });
+  }
 
   let reusedCount = 0;
   let createdCount = 0;

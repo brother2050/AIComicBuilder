@@ -19,6 +19,7 @@ const DEFAULT_BASE_URLS: Record<Protocol, string> = {
   seedance: "https://ark.cn-beijing.volces.com",
   kling: "https://api.klingai.com",
   comfyui: "http://127.0.0.1:8188",
+  siliconflow: "https://api.siliconflow.cn/v1",
 };
 
 function getProtocolOptions(capability: Capability): { value: Protocol; label: string }[] {
@@ -26,6 +27,7 @@ function getProtocolOptions(capability: Capability): { value: Protocol; label: s
     return [
       { value: "openai", label: "OpenAI" },
       { value: "gemini", label: "Gemini" },
+      { value: "siliconflow", label: "SiliconFlow" },
     ];
   }
   if (capability === "image") {
@@ -34,6 +36,7 @@ function getProtocolOptions(capability: Capability): { value: Protocol; label: s
       { value: "gemini", label: "Gemini" },
       { value: "kling", label: "Kling" },
       { value: "comfyui", label: "ComfyUI" },
+      { value: "siliconflow", label: "SiliconFlow" },
     ];
   }
   // video

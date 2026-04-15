@@ -101,7 +101,7 @@ export function WorkflowManager({ providerId, onRunWorkflow }: WorkflowManagerPr
     // 新建时必须选择 provider
     const effectiveProviderId = providerId || editingWorkflow?.providerId;
     if (!effectiveProviderId) {
-      toast.error(t("selectProviderFirst", "Please select a ComfyUI provider first"));
+      toast.error(t("selectProviderFirst"));
       return;
     }
 
@@ -148,7 +148,7 @@ export function WorkflowManager({ providerId, onRunWorkflow }: WorkflowManagerPr
       setSelectedWorkflow(null);
       fetchWorkflows();
     } catch {
-      toast.error(t("deleteSuccess"));
+      toast.error(t("deleteFailed"));
     }
   }
 
@@ -201,7 +201,7 @@ export function WorkflowManager({ providerId, onRunWorkflow }: WorkflowManagerPr
       URL.revokeObjectURL(url);
       toast.success(t("exportSuccess"));
     } catch {
-      toast.error(t("exportSuccess"));
+      toast.error(t("exportFailed"));
     }
   }
 
