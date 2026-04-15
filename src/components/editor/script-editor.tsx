@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { useProjectStore } from "@/stores/project-store";
 import { useModelStore } from "@/stores/model-store";
 import { useTranslations } from "next-intl";
-import { Sparkles, Loader2, FileText, Lightbulb, ListOrdered } from "lucide-react";
+import { Sparkles, Loader2, FileText, Lightbulb, ListOrdered, Plus } from "lucide-react";
 import { InlineModelPicker } from "@/components/editor/model-selector";
 import { apiFetch } from "@/lib/api-fetch";
 import { useModelGuard } from "@/hooks/use-model-guard";
 import { PromptEditButton } from "@/components/prompt-templates/prompt-edit-button";
 import { toast } from "sonner";
+import { ManualScriptDialog } from "@/components/editor/manual-script-dialog";
+import { ManualOutlineDialog } from "@/components/editor/manual-outline-dialog";
 
 export function ScriptEditor() {
   const t = useTranslations();
@@ -21,6 +23,8 @@ export function ScriptEditor() {
   const [generating, setGenerating] = useState(false);
   const [generatingOutline, setGeneratingOutline] = useState(false);
   const [outline, setOutline] = useState(project?.outline || "");
+  const [manualScriptDialogOpen, setManualScriptDialogOpen] = useState(false);
+  const [manualOutlineDialogOpen, setManualOutlineDialogOpen] = useState(false);
   const textGuard = useModelGuard("text");
   const scriptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -142,6 +146,19 @@ export function ScriptEditor() {
     // Update project store so auto-save picks it up
     useProjectStore.setState((state) => ({
       project: state.project ? { ...state.project, outline: value } : null,
+    }));
+    scheduleSave();
+  }
+
+  function handleManualScript(script: string) {
+    updateScript(script);
+    scheduleSave();
+  }
+
+  function handleManualOutline(outline: string) {
+    setOutline(outline);
+    useProjectStore.setState((state) => ({
+      project: state.project ? { ...state.project, outline } : null,
     }));
     scheduleSave();
   }
@@ -285,18 +302,29 @@ export function ScriptEditor() {
                 {t("project.outline")}
               </span>
             </div>
-            <Button
-              size="sm"
-              onClick={handleGenerateOutline}
-              disabled={generatingOutline || generating || !project.idea?.trim()}
-            >
-              {generatingOutline ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-              {generatingOutline ? t("common.generating") : t("project.generateOutline")}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setManualOutlineDialogOpen(true)}
+                disabled={generatingOutline || generating}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {t("project.manualAdd")}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleGenerateOutline}
+                disabled={generatingOutline || generating || !project.idea?.trim()}
+              >
+                {generatingOutline ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                {generatingOutline ? t("common.generating") : t("project.generateOutline")}
+              </Button>
+            </div>
           </div>
 
           <Textarea
@@ -320,18 +348,29 @@ export function ScriptEditor() {
                 {t("project.generatedScript")}
               </span>
             </div>
-            <Button
-              size="sm"
-              onClick={handleGenerateScript}
-              disabled={generating || generatingOutline || !project.idea?.trim()}
-            >
-              {generating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-              {generating ? t("common.generating") : t("project.generateScript")}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setManualScriptDialogOpen(true)}
+                disabled={generating || generatingOutline}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {t("project.manualAdd")}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleGenerateScript}
+                disabled={generating || generatingOutline || !project.idea?.trim()}
+              >
+                {generating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                {generating ? t("common.generating") : t("project.generateScript")}
+              </Button>
+            </div>
           </div>
           {project.script ? (
             <Textarea
@@ -351,6 +390,18 @@ export function ScriptEditor() {
           )}
         </div>
       </div>
+
+      {/* Manual add dialogs */}
+      <ManualScriptDialog
+        open={manualScriptDialogOpen}
+        onOpenChange={setManualScriptDialogOpen}
+        onComplete={handleManualScript}
+      />
+      <ManualOutlineDialog
+        open={manualOutlineDialogOpen}
+        onOpenChange={setManualOutlineDialogOpen}
+        onComplete={handleManualOutline}
+      />
     </div>
   );
 }

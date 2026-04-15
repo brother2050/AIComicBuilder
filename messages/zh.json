@@ -47,6 +47,7 @@
     "generatingOutlineFirst": "正在先生成故事大纲...",
     "outlinePlaceholder": "故事大纲将在此显示...",
     "scriptIdeaPlaceholder": "输入你的创意想法...",
+    "manualAdd": "手动添加",
     "extractCharacters": "角色解析",
     "compareVersions": "对比版本",
     "exitCompare": "退出对比",
@@ -271,6 +272,24 @@
     "processing": "解析中...",
     "success": "成功创建 {count} 集",
     "fileTooLarge": "文件太大，最大支持 20MB"
+  },
+  "manualScript": {
+    "title": "手动添加剧本",
+    "placeholder": "在此处输入或粘贴你的完整剧本...",
+    "hint": "支持标准剧本格式，包括场景描述、角色对话、动作指示等",
+    "confirm": "确认添加",
+    "saving": "保存中...",
+    "success": "剧本已添加",
+    "emptyScript": "剧本内容不能为空"
+  },
+  "manualOutline": {
+    "title": "手动添加大纲",
+    "placeholder": "在此处输入或粘贴你的故事大纲...",
+    "hint": "大纲应包含主要情节、关键转折点和故事走向",
+    "confirm": "确认添加",
+    "saving": "保存中...",
+    "success": "大纲已添加",
+    "emptyOutline": "大纲内容不能为空"
   },
   "settings": {
     "title": "模型设置",
