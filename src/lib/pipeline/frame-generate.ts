@@ -10,6 +10,9 @@ import { resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { eq, and, lt, desc } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { getActiveAsset, insertAssetVersion, patchAsset } from "@/lib/shot-asset-utils";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger('FrameGenerate');
 
 export async function handleFrameGenerate(task: Task) {
   const payload = task.payload as {
@@ -148,7 +151,7 @@ export async function handleFrameGenerate(task: Task) {
       : charsWithRefs.slice(0, 3);
   const charRefImages = relevantChars.map((c) => c.referenceImage as string);
 
-  console.log(`[FrameGenerate] Shot ${shot.sequence}: using ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ") || "fallback"}`);
+  logger.debug(`Shot ${shot.sequence}: using ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ") || "fallback"}`);
 
   // Mark assets as generating
   if (firstFrameAsset) await patchAsset(firstFrameAsset.id, { status: "generating" });

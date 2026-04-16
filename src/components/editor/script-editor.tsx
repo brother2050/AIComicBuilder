@@ -14,6 +14,9 @@ import { PromptEditButton } from "@/components/prompt-templates/prompt-edit-butt
 import { toast } from "sonner";
 import { ManualScriptDialog } from "@/components/editor/manual-script-dialog";
 import { ManualOutlineDialog } from "@/components/editor/manual-outline-dialog";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("script-editor");
 
 export function ScriptEditor() {
   const t = useTranslations();
@@ -63,7 +66,7 @@ export function ScriptEditor() {
         body: JSON.stringify({ idea: proj.idea, script: proj.script, outline: proj.outline }),
       });
     } catch (err) {
-      console.error("Auto-save error:", err);
+      logger.error("Auto-save error:", err);
     }
     savingRef.current = false;
     setSaving(false);
@@ -134,7 +137,7 @@ export function ScriptEditor() {
 
       await fetchProject(project.id, currentEpisodeId ?? undefined);
     } catch (err) {
-      console.error("Outline generate error:", err);
+      logger.error("Outline generate error:", err);
       toast.error(t("common.generationFailed"));
     } finally {
       setGeneratingOutline(false);
@@ -238,7 +241,7 @@ export function ScriptEditor() {
 
       await fetchProject(project.id, currentEpisodeId ?? undefined);
     } catch (err) {
-      console.error("Script generate error:", err);
+      logger.error("Script generate error:", err);
       toast.error(t("common.generationFailed"));
     }
 

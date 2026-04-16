@@ -38,6 +38,9 @@ import {
   Workflow,
 } from "lucide-react";
 import { toast } from "sonner";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("workflow-manager");
 
 interface Workflow {
   id: string;
@@ -91,7 +94,7 @@ export function WorkflowManager({ providerId, onRunWorkflow }: WorkflowManagerPr
         setWorkflows(filtered);
       }
     } catch (error) {
-      console.error("Failed to fetch workflows:", error);
+      logger.error("Failed to fetch workflows:", error);
     } finally {
       setLoading(false);
     }

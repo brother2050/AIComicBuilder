@@ -9,6 +9,9 @@ import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { addImportLog, chunkText } from "@/lib/import-utils";
 import { buildScriptSplitPrompt } from "@/lib/ai/prompts/script-split";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("projects:id:import:split");
 
 export const maxDuration = 300;
 
@@ -93,7 +96,7 @@ export async function POST(
         try {
           return JSON.parse(extractJSON(result.text)) as SplitEpisode[];
         } catch {
-          console.error(`[ImportSplit] Chunk ${idx + 1} JSON parse failed. Raw output:\n${result.text.slice(0, 500)}...`);
+          logger.error(`[ImportSplit] Chunk ${idx + 1} JSON parse failed. Raw output:\n${result.text.slice(0, 500)}...`);
           await addImportLog(
             projectId, 3, "running",
             `第 ${idx + 1} 块 JSON 解析失败，正在重试...`

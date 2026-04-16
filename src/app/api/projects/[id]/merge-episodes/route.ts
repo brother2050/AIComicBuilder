@@ -4,6 +4,9 @@ import { episodes, projects } from "@/lib/db/schema";
 import { eq, and, inArray, asc } from "drizzle-orm";
 import { assembleVideo } from "@/lib/video/ffmpeg";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("projects:id:merge-episodes");
 
 export async function POST(
   req: NextRequest,
@@ -70,7 +73,7 @@ export async function POST(
 
     return NextResponse.json({ videoUrl: result.videoPath, status: "ok" });
   } catch (err) {
-    console.error("[MergeEpisodes] Error:", err);
+    logger.error("[MergeEpisodes] Error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Merge failed" },
       { status: 500 }

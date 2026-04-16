@@ -24,6 +24,9 @@ import {
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api-fetch";
 import { toast } from "sonner";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("project:id:episodes:episodeId:preview");
 
 export default function EpisodePreviewPage() {
   const t = useTranslations();
@@ -94,7 +97,7 @@ export default function EpisodePreviewPage() {
       });
       await res.json();
     } catch (err) {
-      console.error("Video assemble error:", err);
+      logger.error("Video assemble error:", err);
       toast.error(t("common.generationFailed"));
     }
     setAssembling(false);

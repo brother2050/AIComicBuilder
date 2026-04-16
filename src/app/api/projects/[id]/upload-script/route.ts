@@ -9,6 +9,9 @@ import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { id as genId } from "@/lib/id";
 import { buildScriptSplitPrompt } from "@/lib/ai/prompts/script-split";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("projects:id:upload-script");
 
 export const maxDuration = 300;
 
@@ -206,7 +209,7 @@ export async function POST(
     created.push(row);
   }
 
-  console.log(
+  logger.info(
     `[UploadScript] Created ${created.length} episodes from ${chunks.length} chunks`
   );
 

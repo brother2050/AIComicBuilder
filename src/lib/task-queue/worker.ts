@@ -1,6 +1,8 @@
 import { dequeueTask, completeTask, failTask } from "./queue";
 import type { TaskHandlerMap, Task } from "./types";
+import { createLogger } from "@/lib/logger";
 
+const logger = createLogger('TaskWorker');
 const POLL_INTERVAL_MS = 2000;
 
 let isRunning = false;
@@ -35,7 +37,7 @@ async function poll() {
       await processTask(task);
     }
   } catch (err) {
-    console.error("[TaskWorker] Poll error:", err);
+    logger.error("Poll error", err);
   }
 
   if (isRunning) {
@@ -46,11 +48,11 @@ async function poll() {
 export function startWorker() {
   if (isRunning) return;
   isRunning = true;
-  console.log("[TaskWorker] Started polling every", POLL_INTERVAL_MS, "ms");
+  logger.info(`Started polling every ${POLL_INTERVAL_MS}ms`);
   poll();
 }
 
 export function stopWorker() {
   isRunning = false;
-  console.log("[TaskWorker] Stopped");
+  logger.info("Stopped");
 }

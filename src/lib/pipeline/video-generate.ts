@@ -10,6 +10,9 @@ import { getModelMaxDuration } from "@/lib/ai/model-limits";
 import { eq } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { getActiveAsset, insertAssetVersion } from "@/lib/shot-asset-utils";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger('VideoGenerate');
 
 async function getVersionedUploadDirFromPipeline(versionId: string | null | undefined): Promise<string> {
   if (!versionId) return process.env.UPLOAD_DIR || "./uploads";
@@ -107,12 +110,10 @@ export async function handleVideoGenerate(task: Task) {
         firstFrameUrl
       );
 
-      console.log(
-        `[VideoQuality] Shot ${payload.shotId}: score=${qualityResult.score}, pass=${qualityResult.pass}`
-      );
+      logger.info(`Shot ${payload.shotId}: score=${qualityResult.score}, pass=${qualityResult.pass}`);
 
       if (!qualityResult.pass) {
-        console.warn(`[VideoQuality] Issues: ${qualityResult.issues.join(", ")}`);
+        logger.warn(`Issues: ${qualityResult.issues.join(", ")}`);
       }
 
       return {
@@ -122,7 +123,7 @@ export async function handleVideoGenerate(task: Task) {
       };
     }
   } catch (e) {
-    console.warn("[VideoQuality] Quality check skipped:", e);
+    logger.warn("Quality check skipped", e);
   }
 
   return { videoPath: result.filePath };

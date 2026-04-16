@@ -21,6 +21,9 @@ import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { markDownstreamStale } from "@/lib/staleness";
 import * as fs from "fs";
 import * as path from "path";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("projects:id");
 
 async function resolveProject(id: string, userId: string) {
   const [project] = await db
@@ -295,7 +298,7 @@ export async function DELETE(
 
     if (fs.existsSync(projectUploadDir)) {
       fs.rmSync(projectUploadDir, { recursive: true, force: true });
-      console.log(`[ProjectDelete] Deleted project files: ${projectUploadDir}`);
+      logger.info(`[ProjectDelete] Deleted project files: ${projectUploadDir}`);
     }
 
     // Also check for mood board images in the main uploads directory
@@ -323,7 +326,7 @@ export async function DELETE(
       }
     }
   } catch (err) {
-    console.error(`[ProjectDelete] Error deleting project files:`, err);
+    logger.error(`[ProjectDelete] Error deleting project files:`, err);
     // Don't fail the request if file deletion fails
   }
 

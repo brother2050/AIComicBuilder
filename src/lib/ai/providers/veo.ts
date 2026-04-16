@@ -4,6 +4,9 @@ import type { VideoProvider, VideoGenerateParams, VideoGenerateResult } from "..
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger(path.basename("src/lib/ai/providers/veo.ts", ".ts"));
 
 const VALID_DURATIONS = [4, 6, 8] as const;
 
@@ -86,7 +89,7 @@ export class VeoProvider implements VideoProvider {
     }
 
     const modeLabel = isKeyframe ? "keyframe" : "image2video";
-    console.log(`[Veo] mode=${modeLabel}, model=${this.model}, duration=${durationSeconds}s, ratio=${aspectRatio}`);
+    logger.debug(`mode=${modeLabel}, model=${this.model}, duration=${durationSeconds}s, ratio=${aspectRatio}`);
 
     let operation = await this.client.models.generateVideos({
       model: this.model,
@@ -126,7 +129,7 @@ export class VeoProvider implements VideoProvider {
       referenceImages,
     };
 
-    console.log(`[Veo] mode=referenceImages, model=${this.model}, refCount=${referenceImages.length}, ratio=${aspectRatio}`);
+    logger.debug(`mode=referenceImages, model=${this.model}, refCount=${referenceImages.length}, ratio=${aspectRatio}`);
 
     let operation = await this.client.models.generateVideos({
       model: this.model,
@@ -164,7 +167,7 @@ export class VeoProvider implements VideoProvider {
 
     await this.client.files.download({ file: videoFile, downloadPath });
 
-    console.log(`[Veo] Video saved to ${downloadPath}`);
+    logger.info(`Video saved to ${downloadPath}`);
     return { filePath: downloadPath };
   }
 
@@ -175,7 +178,7 @@ export class VeoProvider implements VideoProvider {
     let operation = initial;
 
     for (let i = 0; i < maxAttempts; i++) {
-      console.log(`[Veo] Poll ${i + 1}: done=${operation.done}`);
+      logger.debug(`Poll ${i + 1}: done=${operation.done}`);
 
       if (operation.done) {
         if (operation.error) {

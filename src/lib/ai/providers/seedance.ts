@@ -2,6 +2,9 @@ import type { VideoProvider, VideoGenerateParams, VideoGenerateResult } from "..
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger(path.basename("src/lib/ai/providers/seedance.ts", ".ts"));
 
 function toDataUrl(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase().replace(".", "");
@@ -54,9 +57,7 @@ export class SeedanceProvider implements VideoProvider {
       ? this.buildKeyframeBody(params as VideoGenerateParams & { firstFrame: string; lastFrame: string })
       : this.buildReferenceBody(params as VideoGenerateParams & { initialImage: string });
 
-    console.log(
-      `[Seedance] Submitting task: model=${body.model}, duration=${body.duration}, ratio=${body.ratio}`
-    );
+    logger.debug(`Submitting task: model=${body.model}, duration=${body.duration}, ratio=${body.ratio}`);
 
     const submitResponse = await fetch(
       `${this.baseUrl}/contents/generations/tasks`,
@@ -78,7 +79,7 @@ export class SeedanceProvider implements VideoProvider {
     }
 
     const submitResult = (await submitResponse.json()) as { id: string };
-    console.log(`[Seedance] Task submitted: ${submitResult.id}`);
+    logger.debug(`Task submitted: ${submitResult.id}`);
 
     const { videoUrl, lastFrameUrl } = await this.pollForResult(submitResult.id);
 
@@ -174,7 +175,7 @@ export class SeedanceProvider implements VideoProvider {
         error?: { message?: string };
       };
 
-      console.log(`[Seedance] Poll ${i + 1}: status=${result.status}`);
+      logger.debug(`Poll ${i + 1}: status=${result.status}`);
 
       if (result.status === "succeeded" && result.content?.video_url) {
         return {

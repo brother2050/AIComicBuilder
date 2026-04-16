@@ -16,6 +16,9 @@ import { apiFetch } from "@/lib/api-fetch";
 import { useModelStore } from "@/stores/model-store";
 import { useModelGuard } from "@/hooks/use-model-guard";
 import { toast } from "sonner";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("upload-script-dialog");
 
 const ACCEPTED = ".txt,.docx,.pdf,.md,.markdown";
 const MAX_SIZE = 20 * 1024 * 1024; // 20 MB
@@ -88,7 +91,7 @@ export function UploadScriptDialog({
       onOpenChange(false);
       onComplete();
     } catch (err) {
-      console.error("Upload script error:", err);
+      logger.error("Upload script error:", err);
       toast.error(
         err instanceof Error ? err.message : tc("generationFailed")
       );

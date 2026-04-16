@@ -10,6 +10,9 @@ import { ComfyUIProviderManager } from "@/components/comfyui/provider-manager";
 import { WorkflowManager } from "@/components/comfyui/workflow-manager";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { toast } from "sonner";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("comfyui-workflows");
 
 interface ComfyUIProviderConfig {
   id?: string;
@@ -88,7 +91,7 @@ export default function ComfyUIWorkflowsPage() {
       pollStatus(data.generationId);
     } catch (error) {
       toast.error(t("status.failed"));
-      console.error(error);
+      logger.error(error);
     } finally {
       setRunningWorkflowId(null);
     }
@@ -113,7 +116,7 @@ export default function ComfyUIWorkflowsPage() {
           }
         }
       } catch (error) {
-        console.error("Poll error:", error);
+        logger.error("Poll error:", error);
       }
     }
     toast.warning(t("running"));

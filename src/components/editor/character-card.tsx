@@ -14,6 +14,9 @@ import { apiFetch } from "@/lib/api-fetch";
 import { useModelGuard } from "@/hooks/use-model-guard";
 import { toast } from "sonner";
 import { buildCharacterTurnaroundPrompt } from "@/lib/ai/prompts/character-image";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("character-card");
 
 interface CharacterCardProps {
   id: string;
@@ -102,7 +105,7 @@ export function CharacterCard({
       });
       await response.json();
     } catch (err) {
-      console.error("Character image error:", err);
+      logger.error("Character image error:", err);
       toast.error(t("common.generationFailed"));
     }
     setGenerating(false);

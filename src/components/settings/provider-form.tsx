@@ -12,6 +12,9 @@ import {
 } from "@/stores/model-store";
 import { useTranslations } from "next-intl";
 import { Loader2, Download, Plus, Eye, EyeOff, Trash2, Search, Workflow } from "lucide-react";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("provider-form");
 
 const DEFAULT_BASE_URLS: Record<Protocol, string> = {
   openai: "https://api.openai.com",
@@ -84,7 +87,7 @@ export function ProviderForm({ provider }: ProviderFormProps) {
         setWorkflows(filtered);
       }
     } catch (error) {
-      console.error("Failed to fetch workflows:", error);
+      logger.error("Failed to fetch workflows:", error);
     } finally {
       setFetchingWorkflows(false);
     }

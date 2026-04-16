@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("comfyui:proxy");
 
 interface ProxyRequest {
   baseUrl: string;
@@ -41,7 +44,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    console.error("[comfyui/proxy] Error:", error);
+    logger.error("[comfyui/proxy] Error:", error);
     return NextResponse.json(
       { error: "Proxy request failed" },
       { status: 500 }

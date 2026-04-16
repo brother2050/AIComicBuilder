@@ -7,6 +7,9 @@ import { eq, and } from "drizzle-orm";
 import { ComfyUIProvider } from "@/lib/ai/providers/comfyui";
 import fs from "node:fs";
 import path from "node:path";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("comfyui:run");
 
 /**
  * POST /api/comfyui/run
@@ -89,7 +92,7 @@ export async function POST(request: Request) {
       .where(eq(comfyuiWorkflows.id, workflowId));
 
     // 在后台执行（不阻塞响应）
-    executeWorkflow(generationId, comfyProvider, mergedWorkflow, userId).catch(console.error);
+    executeWorkflow(generationId, comfyProvider, mergedWorkflow, userId).catch(err => logger.error("executeWorkflow error", err));
 
     return NextResponse.json({
       generationId,
@@ -97,7 +100,7 @@ export async function POST(request: Request) {
       message: "Workflow execution started",
     });
   } catch (error) {
-    console.error("[comfyui/run] POST error:", error);
+    logger.error("[comfyui/run] POST error:", error);
     return NextResponse.json(
       { error: "Failed to start workflow" },
       { status: 500 }
@@ -163,7 +166,7 @@ async function executeWorkflow(
       })
       .where(eq(comfyuiGenerations.id, generationId));
 
-    console.log(`[comfyui/run] Generation ${generationId} completed in ${duration}s`);
+    logger.info(`[comfyui/run] Generation ${generationId} completed in ${duration}s`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
@@ -176,6 +179,6 @@ async function executeWorkflow(
       })
       .where(eq(comfyuiGenerations.id, generationId));
 
-    console.error(`[comfyui/run] Generation ${generationId} failed:`, errorMessage);
+    logger.error(`[comfyui/run] Generation ${generationId} failed:`, errorMessage);
   }
 }

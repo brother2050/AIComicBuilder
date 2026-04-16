@@ -9,6 +9,9 @@ import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { addImportLog, chunkText } from "@/lib/import-utils";
 import { buildImportCharacterExtractPrompt } from "@/lib/ai/prompts/import-character-extract";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("projects:id:import:characters");
 
 export const maxDuration = 300;
 
@@ -86,7 +89,7 @@ export async function POST(
           if (Array.isArray(parsed)) return { chars: parsed as ExtractedChar[], rels: [] as ExtractedRelation[] };
           return { chars: (parsed.characters || []) as ExtractedChar[], rels: (parsed.relationships || []) as ExtractedRelation[] };
         } catch {
-          console.error(`[ImportChars] Chunk ${idx + 1} JSON parse failed. Raw:\n${result.text.slice(0, 500)}...`);
+          logger.error(`[ImportChars] Chunk ${idx + 1} JSON parse failed. Raw:\n${result.text.slice(0, 500)}...`);
           await addImportLog(
             projectId, 2, "running",
             `第 ${idx + 1} 块 JSON 解析失败，正在重试...`

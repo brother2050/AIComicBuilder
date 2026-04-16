@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("models:list");
 
 interface ListRequest {
   protocol: string;
@@ -22,7 +25,7 @@ function buildModelsUrl(baseUrl: string): string {
 
 async function fetchModels(baseUrl: string, apiKey: string): Promise<ModelItem[]> {
   const url = buildModelsUrl(baseUrl);
-  console.log("[models/list] Fetching:", url);
+  logger.info("[models/list] Fetching:", url);
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
@@ -43,7 +46,7 @@ async function fetchModels(baseUrl: string, apiKey: string): Promise<ModelItem[]
 async function fetchGeminiModels(baseUrl: string, apiKey: string): Promise<ModelItem[]> {
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/v1beta/models?key=${encodeURIComponent(apiKey)}`;
-  console.log("[models/list] Fetching Gemini:", url.replace(apiKey, "***"));
+  logger.info("[models/list] Fetching Gemini:", url.replace(apiKey, "***"));
 
   const res = await fetch(url);
 
@@ -101,7 +104,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ models });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[models/list] Error:", message);
+    logger.error("[models/list] Error:", message);
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

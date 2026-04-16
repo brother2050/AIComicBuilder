@@ -4,6 +4,9 @@ import { id as genId } from "@/lib/id";
 import { db } from "@/lib/db";
 import { comfyuiProviders } from "@/lib/db/schema-comfyui";
 import { eq } from "drizzle-orm";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("comfyui:providers");
 
 /**
  * GET /api/comfyui/providers
@@ -20,7 +23,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ providers });
   } catch (error) {
-    console.error("[comfyui/providers] GET error:", error);
+    logger.error("[comfyui/providers] GET error:", error);
     return NextResponse.json(
       { error: "Failed to fetch providers" },
       { status: 500 }
@@ -67,7 +70,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ provider }, { status: 201 });
   } catch (error) {
-    console.error("[comfyui/providers] POST error:", error);
+    logger.error("[comfyui/providers] POST error:", error);
     return NextResponse.json(
       { error: "Failed to create provider" },
       { status: 500 }

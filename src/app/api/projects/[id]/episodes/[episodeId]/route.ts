@@ -12,6 +12,9 @@ import {
 import { eq, asc, and, or, isNull, desc, inArray } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { markDownstreamStale } from "@/lib/staleness";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("projects:id:episodes:episodeId");
 
 async function resolveProjectAndEpisode(
   projectId: string,
@@ -84,11 +87,11 @@ export async function GET(
     .limit(10);
 
   // Debug logging
-  console.log(`[Episode API] projectId=${id}, episodeId=${episodeId}, versionId=${versionId}`);
-  console.log(`[Episode API] allVersions count: ${allVersions.length}`);
-  console.log(`[Episode API] resolvedVersionId=${resolvedVersionId}`);
-  console.log(`[Episode API] debug shots (first 10):`, JSON.stringify(debugAllShots));
-  console.log(`[Episode API] debug versions:`, JSON.stringify(debugVersions));
+  logger.info(`[Episode API] projectId=${id}, episodeId=${episodeId}, versionId=${versionId}`);
+  logger.info(`[Episode API] allVersions count: ${allVersions.length}`);
+  logger.info(`[Episode API] resolvedVersionId=${resolvedVersionId}`);
+  logger.info(`[Episode API] debug shots (first 10):`, JSON.stringify(debugAllShots));
+  logger.info(`[Episode API] debug versions:`, JSON.stringify(debugVersions));
 
   // Auto-fix: If this episode has NO versions yet but shots exist with episodeId=null,
   // update the shots to belong to this episode. This handles legacy data created
@@ -103,7 +106,7 @@ export async function GET(
       await db.update(storyboardVersions)
         .set({ episodeId: episodeId })
         .where(eq(storyboardVersions.id, legacyVersion.id));
-      console.log(`[Episode API] Updated legacy version ${legacyVersion.id} to episodeId=${episodeId}`);
+      logger.info(`[Episode API] Updated legacy version ${legacyVersion.id} to episodeId=${episodeId}`);
 
       // Update all shots for this version to have the episodeId
       await db.update(shots)
@@ -112,7 +115,7 @@ export async function GET(
           eq(shots.projectId, id),
           eq(shots.versionId, legacyVersion.id)
         ));
-      console.log(`[Episode API] Updated shots for version ${legacyVersion.id} to episodeId=${episodeId}`);
+      logger.info(`[Episode API] Updated shots for version ${legacyVersion.id} to episodeId=${episodeId}`);
       effectiveVersionId = legacyVersion.id;
     }
   }
@@ -148,7 +151,7 @@ export async function GET(
         .orderBy(asc(shots.sequence))
     : [];
 
-  console.log(`[Episode API] episodeShots count: ${episodeShots.length}`);
+  logger.info(`[Episode API] episodeShots count: ${episodeShots.length}`);
 
   // Bulk-load ALL shot assets (all versions, not just active) so the UI
   // can render version history arrows and switch between historical fileUrls.

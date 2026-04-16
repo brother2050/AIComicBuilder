@@ -28,6 +28,9 @@ import { buildVideoPrompt, buildReferenceVideoPrompt } from "@/lib/ai/prompts/vi
 import { buildRefVideoPromptRequest } from "@/lib/ai/prompts/ref-video-prompt-generate";
 import { buildCharacterTurnaroundPrompt } from "@/lib/ai/prompts/character-image";
 import { assembleVideo } from "@/lib/video/ffmpeg";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger('GenerateAPI');
 import { parseRefImages, serializeRefImages, appendToHistory, type RefImage } from "@/lib/ref-image-utils";
 import {
   loadShotLegacyView,
@@ -153,7 +156,7 @@ export async function POST(
   };
 
   const { action, payload, modelConfig, episodeId } = body;
-  console.log(`[Generate API] action=${action}, episodeId=${episodeId}`);
+  logger.info(`action=${action}, episodeId=${episodeId}`);
 
   if (action === "script_outline") {
     return handleScriptOutlineAction(projectId, userId, payload, modelConfig, episodeId);
@@ -309,9 +312,9 @@ async function handleScriptOutlineAction(
             .set({ outline, updatedAt: new Date() })
             .where(eq(projects.id, projectId));
         }
-        console.log(`[ScriptOutline] Saved outline for ${episodeId || projectId}`);
+        logger.info(`Saved outline for ${episodeId || projectId}`);
       } catch (err) {
-        console.error("[ScriptOutline] onFinish error:", err);
+        logger.error("onFinish error", err);
       }
     },
   });
@@ -397,9 +400,9 @@ async function handleScriptGenerate(
             .set({ script: text, updatedAt: new Date() })
             .where(eq(projects.id, projectId));
         }
-        console.log(`[ScriptGenerate] Saved generated script for ${episodeId || projectId}`);
+        logger.info(`Saved generated script for ${episodeId || projectId}`);
       } catch (err) {
-        console.error("[ScriptGenerate] onFinish error:", err);
+        logger.error("onFinish error", err);
       }
     },
   });
@@ -456,9 +459,9 @@ async function handleScriptParseStream(
         } else {
           await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId));
         }
-        console.log(`[ScriptParse] Parsed screenplay for ${episodeId || projectId}`);
+        logger.info(`Parsed screenplay for ${episodeId || projectId}`);
       } catch (err) {
-        console.error("[ScriptParse] onFinish error:", err);
+        logger.error("onFinish error", err);
       }
     },
   });
@@ -521,7 +524,7 @@ async function handleCharacterExtract(
 
   const model = createLanguageModel(modelConfig.text);
   const charExtractSystem = await resolvePrompt("character_extract", { userId, projectId });
-  console.log("[CharacterExtract] resolved system prompt:\n", charExtractSystem);
+  logger.debug("resolved system prompt", charExtractSystem);
 
   const { text } = await generateText({
     model,
@@ -529,8 +532,8 @@ async function handleCharacterExtract(
     prompt: buildCharacterExtractPrompt(script),
   });
 
-  console.log("[CharacterExtract] Raw AI response:\n", text);
-  console.log("[CharacterExtract] Response length:", text.length);
+  logger.debug("Raw AI response", text);
+  logger.debug(`Response length: ${text.length}`);
 
   let extracted: Array<{
     name: string;
@@ -550,21 +553,21 @@ async function handleCharacterExtract(
 
   try {
     const extractedJSON = extractJSON(text);
-    console.log("[CharacterExtract] Extracted JSON:\n", extractedJSON);
+    logger.debug("Extracted JSON", extractedJSON);
     const parsed = JSON.parse(extractedJSON);
 
     // Support both formats: new { characters, relationships } and legacy array
     extracted = Array.isArray(parsed) ? parsed : (parsed.characters || []);
     extractedRelations = Array.isArray(parsed) ? [] : (parsed.relationships || []);
   } catch (error) {
-    console.error("[CharacterExtract] JSON parse error:", error);
-    console.error("[CharacterExtract] Failed to parse text:", text.substring(0, 1000));
+    logger.error("JSON parse error", error);
+    logger.error("Failed to parse text", text.substring(0, 1000));
     
     // Fallback: try to extract character names using regex if JSON parsing fails
     // Look for patterns like: "角色": "张三" or "name": "李四"
     const nameMatches = text.match(/["']?(?:角色|name|character|姓名)["']?\s*[:：]\s*["']([^"']+)["']/gi);
     if (nameMatches && nameMatches.length > 0) {
-      console.log("[CharacterExtract] Fallback: extracted character names:", nameMatches);
+      logger.info("Fallback: extracted character names", nameMatches);
       extracted = nameMatches
         .map((match) => {
           // Extract the name from the match
@@ -592,13 +595,13 @@ async function handleCharacterExtract(
         })
         .filter((char): char is NonNullable<typeof char> => char !== null);
       
-      console.log("[CharacterExtract] Fallback: valid characters extracted:", extracted.length);
+      logger.info(`Fallback: valid characters extracted: ${extracted.length}`);
     }
   }
 
   // Additional validation: ensure we have valid character data
   if (extracted.length === 0) {
-    console.warn("[CharacterExtract] No valid characters extracted, skipping character processing");
+    logger.warn("No valid characters extracted, skipping character processing");
     return NextResponse.json({ 
       error: "Failed to extract characters from script. Please try again or add characters manually.",
       details: "AI response could not be parsed as valid JSON"
@@ -622,7 +625,7 @@ async function handleCharacterExtract(
           scope: (char.scope === "guest" ? "guest" : "main") as "main" | "guest",
         })
         .where(eq(characters.id, existing.id));
-      console.log(`[CharacterExtract] Updated existing character "${char.name}" (${existing.id}), desc length: ${char.description.length}`);
+      logger.info(`Updated existing character "${char.name}" (${existing.id}), desc length: ${char.description.length}`);
       linkedCharIds.push(existing.id);
       reusedCount++;
     } else {
@@ -703,9 +706,7 @@ async function handleCharacterExtract(
     }
   }
 
-  console.log(
-    `[CharacterExtract] ${extracted.length} characters: ${reusedCount} reused, ${createdCount} new, ${linkedCharIds.length} linked to episode, ${extractedRelations.length} relations`
-  );
+  logger.info(`${extracted.length} characters: ${reusedCount} reused, ${createdCount} new, ${linkedCharIds.length} linked to episode, ${extractedRelations.length} relations`);
 
   return NextResponse.json({ characters: extracted });
 }
@@ -730,7 +731,7 @@ async function handleSingleCharacterImage(
     return NextResponse.json({ error: "Character not found" }, { status: 404 });
   }
 
-  console.log(`[generate] modelConfig:`, JSON.stringify(modelConfig, null, 2));
+  logger.debug("modelConfig", modelConfig);
   const ai = resolveImageProvider(modelConfig);
   const prompt = buildCharacterTurnaroundPrompt(character.description || character.name, character.name);
   const imgOpts = ratioToImageOpts(
@@ -783,11 +784,11 @@ async function handleSingleCharacterImage(
         staleCount++;
       }
     }
-    console.log(`[SingleCharacterImage] ${character.name} regenerated; marked ${staleCount} shots' ref images as stale`);
+    logger.info(`${character.name} regenerated; marked ${staleCount} shots' ref images as stale`);
 
     return NextResponse.json({ characterId, imagePath, status: "ok", staleShots: staleCount });
   } catch (err) {
-    console.error(`[SingleCharacterImage] Error for ${character.name}:`, err);
+    logger.error(`Error for ${character.name}`, err);
     return NextResponse.json({ characterId, status: "error", error: extractErrorMessage(err) }, { status: 500 });
   }
 }
@@ -829,7 +830,7 @@ async function handleBatchCharacterImage(
 
   // ComfyUI executes workflows sequentially to avoid timeout
   if (useSequential) {
-    console.log(`[BatchCharacterImage] Using sequential execution for ComfyUI (${needImages.length} items)`);
+    logger.info(`Using sequential execution for ComfyUI (${needImages.length} items)`);
     for (let i = 0; i < needImages.length; i++) {
       const character = needImages[i];
       try {
@@ -849,9 +850,9 @@ async function handleBatchCharacterImage(
           .set({ referenceImage: imagePath, referenceImageHistory: JSON.stringify(history) })
           .where(eq(characters.id, character.id));
         results.push({ characterId: character.id, name: character.name, imagePath, status: "ok" });
-        console.log(`[BatchCharacterImage] ✓ ${character.name} (${i + 1}/${needImages.length})`);
+        logger.info(`✓ ${character.name} (${i + 1}/${needImages.length})`);
       } catch (err) {
-        console.error(`[BatchCharacterImage] Error for ${character.name}:`, err);
+        logger.error(`Error for ${character.name}`, err);
         results.push({ characterId: character.id, name: character.name, status: "error", error: extractErrorMessage(err) });
       }
     }
@@ -878,7 +879,7 @@ async function handleBatchCharacterImage(
             .where(eq(characters.id, character.id));
           return { characterId: character.id, name: character.name, imagePath, status: "ok" as const };
         } catch (err) {
-          console.error(`[BatchCharacterImage] Error for ${character.name}:`, err);
+          logger.error(`Error for ${character.name}`, err);
           return { characterId: character.id, name: character.name, status: "error" as const, error: extractErrorMessage(err) };
         }
       })
@@ -896,7 +897,7 @@ async function handleShotSplitStream(
   modelConfig?: ModelConfig,
   episodeId?: string
 ) {
-  console.log(`[ShotSplit] Starting: projectId=${projectId}, episodeId=${episodeId}`);
+  logger.info(`Starting: projectId=${projectId}, episodeId=${episodeId}`);
 
   let script: string | null = null;
   let generationMode: string = "keyframe";
@@ -998,10 +999,10 @@ async function handleShotSplitStream(
   // Log scene detection details
   const sceneRe = /^[\s*#]*(?:SCENE|场景)\s*\d+/i;
   const sceneMatches = fullScript.split("\n").filter((l) => sceneRe.test(l.trim()));
-  console.log(`[ShotSplit] Detected ${sceneMatches.length} scenes, split into ${sceneChunks.length} chunk(s) of ~8 scenes each`);
+  logger.info(`Detected ${sceneMatches.length} scenes, split into ${sceneChunks.length} chunk(s) of ~8 scenes each`);
   sceneChunks.forEach((c, i) => {
     const sceneCount = c.split("\n").filter((l) => sceneRe.test(l.trim())).length;
-    console.log(`[ShotSplit] Chunk ${i + 1}: ${sceneCount} scenes, ${c.length} chars`);
+    logger.debug(`Chunk ${i + 1}: ${sceneCount} scenes, ${c.length} chars`);
   });
 
   type ParsedShot = {
@@ -1068,10 +1069,10 @@ async function handleShotSplitStream(
         } else {
           shotList = parsed.shots || [];
         }
-        console.log(`[ShotSplit] Chunk ${idx + 1}/${sceneChunks.length}: ${shotList.length} shots, keys: ${shotList[0] ? Object.keys(shotList[0]).join(",") : "empty"}`);
+        logger.debug(`Chunk ${idx + 1}/${sceneChunks.length}: ${shotList.length} shots, keys: ${shotList[0] ? Object.keys(shotList[0]).join(",") : "empty"}`);
         return shotList as ParsedShot[];
       } catch (err) {
-        console.error(`[ShotSplit] Chunk ${idx + 1} failed:`, err);
+        logger.error(`Chunk ${idx + 1} failed`, err);
         return [] as ParsedShot[];
       }
     })
@@ -1110,10 +1111,10 @@ async function handleShotSplitStream(
     createdAt: new Date(),
     episodeId: episodeId ?? null,
   });
-  console.log(`[ShotSplit] Created version: id=${versionId}, episodeId=${episodeId ?? null}`);
+  logger.info(`Created version: id=${versionId}, episodeId=${episodeId ?? null}`);
 
   for (const shot of allShots) {
-    console.log(`[ShotSplit] Creating shot: sequence=${shot.sequence}, episodeId=${episodeId ?? null}`);
+    logger.debug(`Creating shot: sequence=${shot.sequence}, episodeId=${episodeId ?? null}`);
     const shotId = genId();
     await db.insert(shots).values({
       id: shotId,
@@ -1134,7 +1135,7 @@ async function handleShotSplitStream(
       musicCue: shot.musicCue || "",
       episodeId: episodeId ?? null,
     });
-    console.log(`[ShotSplit] Shot inserted: id=${shotId}, episodeId=${episodeId ?? null}`);
+    logger.debug(`Shot inserted: id=${shotId}, episodeId=${episodeId ?? null}`);
     // No automatic asset seeding — shot_assets rows are only created when
     // the user explicitly clicks "生成首尾帧提示词" or "生成参考图提示词".
     // Each generation button writes only its own asset type.
@@ -1156,7 +1157,7 @@ async function handleShotSplitStream(
     }
   }
 
-  console.log(`[ShotSplit] Created ${allShots.length} shots from ${sceneChunks.length} chunks`);
+  logger.info(`Created ${allShots.length} shots from ${sceneChunks.length} chunks`);
   return NextResponse.json({ shots: allShots.length });
 }
 
@@ -1258,7 +1259,7 @@ Return ONLY a JSON object (no markdown fences) with these fields:
 
 IMPORTANT: Keep the same scene, characters, and narrative intent. Only rephrase to avoid safety filter triggers. Match the language of the original text.`;
 
-  console.log(`[SingleShotRewrite] Shot ${shot.sequence} prompt:\n${prompt}`);
+  logger.debug(`Shot ${shot.sequence} prompt`, prompt);
 
   try {
     const { text } = await import("ai").then(({ generateText }) =>
@@ -1307,7 +1308,7 @@ IMPORTANT: Keep the same scene, characters, and narrative intent. Only rephrase 
 
     return NextResponse.json({ shotId, status: "ok", ...parsed });
   } catch (err) {
-    console.error(`[SingleShotRewrite] Error for shot ${shotId}:`, err);
+    logger.error(`Error for shot ${shotId}`, err);
     return NextResponse.json({ shotId, status: "error", error: extractErrorMessage(err) }, { status: 500 });
   }
 }
@@ -1392,14 +1393,14 @@ function handleBatchFrameGenerate(
         let doneCount = 0;
 
         // Sequential execution for all providers to support streaming progress
-        console.log(`[BatchFrameGenerate] Starting sequential generation with SSE: 0/${total}`);
+        logger.info(`Starting sequential generation with SSE: 0/${total}`);
 
         for (const shot of allShots) {
           const shotLegacy = allShotsLegacy.get(shot.id);
 
           if (!overwrite && shotLegacy?.firstFrame && shotLegacy?.lastFrame) {
             doneCount++;
-            console.log(`[BatchFrameGenerate] ⊙ shot ${shot.sequence} skipped (${doneCount}/${total})`);
+            logger.debug(`⊙ shot ${shot.sequence} skipped (${doneCount}/${total})`);
             results.push({ shotId: shot.id, sequence: shot.sequence, status: "skipped" });
             sendProgress(doneCount, total, "skipped", shot.id);
             continue;
@@ -1468,7 +1469,7 @@ function handleBatchFrameGenerate(
 
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
             doneCount++;
-            console.log(`[BatchFrameGenerate] ✓ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`);
+            logger.info(`✓ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`);
 
             results.push({
               shotId: shot.id,
@@ -1481,7 +1482,7 @@ function handleBatchFrameGenerate(
           } catch (err) {
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
             doneCount++;
-            console.error(`[BatchFrameGenerate] ✗ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s:`, err);
+            logger.error(`✗ shot ${shot.sequence} (${doneCount}/${total}) ${elapsed}s`, err);
             await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
             results.push({
               shotId: shot.id,
@@ -1495,10 +1496,10 @@ function handleBatchFrameGenerate(
 
         const okCount = results.filter((r) => r.status === "ok").length;
         const errCount = results.filter((r) => r.status === "error").length;
-        console.log(`[BatchFrameGenerate] Done: ${okCount} ok, ${errCount} errors`);
+        logger.info(`Done: ${okCount} ok, ${errCount} errors`);
         sendComplete(results);
       } catch (err) {
-        console.error("[BatchFrameGenerate] Stream error:", err);
+        logger.error("Stream error", err);
         encode({ type: "error", error: extractErrorMessage(err) });
       } finally {
         controller.close();
@@ -1623,7 +1624,7 @@ async function handleSingleFrameGenerate(
 
     return NextResponse.json({ shotId, firstFrame: firstFramePath, lastFrame: lastFramePath, status: "ok" });
   } catch (err) {
-    console.error(`[SingleFrameGenerate] Error for shot ${shotId}:`, err);
+    logger.error(`Error for shot ${shotId}`, err);
     await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shotId));
     return NextResponse.json({ shotId, status: "error", error: extractErrorMessage(err) }, { status: 500 });
   }
@@ -1732,7 +1733,7 @@ async function handleSingleVideoGenerate(
 
     return NextResponse.json({ shotId, videoUrl: result.filePath, status: "ok" });
   } catch (err) {
-    console.error(`[SingleVideoGenerate] Error for shot ${shotId}:`, err);
+    logger.error(`Error for shot ${shotId}`, err);
     await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shotId));
     return NextResponse.json({ shotId, status: "error", error: extractErrorMessage(err) }, { status: 500 });
   }
@@ -1787,8 +1788,8 @@ async function handleBatchVideoGenerate(
 
   // Check if using ComfyUI (sequential execution required)
   const useSequential = isComfyUIProvider(modelConfig);
-  console.log(`[BatchVideoGenerate] Processing ${eligible.length} shots`);
-  console.log(`[BatchVideoGenerate] Execution mode: ${useSequential ? "SEQUENTIAL (ComfyUI)" : "PARALLEL"}`);
+  logger.info(`Processing ${eligible.length} shots`);
+  logger.info(`Execution mode: ${useSequential ? "SEQUENTIAL (ComfyUI)" : "PARALLEL"}`);
 
   // Mark all as generating
   await Promise.all(
@@ -1850,10 +1851,10 @@ async function handleBatchVideoGenerate(
         });
         await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
 
-        console.log(`[BatchVideoGenerate] ✓ shot ${shot.sequence} (${i + 1}/${eligible.length})`);
+        logger.info(`✓ shot ${shot.sequence} (${i + 1}/${eligible.length})`);
         results.push({ shotId: shot.id, sequence: shot.sequence, status: "ok", videoUrl: result.filePath });
       } catch (err) {
-        console.error(`[BatchVideoGenerate] ✗ shot ${shot.sequence} (${i + 1}/${eligible.length}):`, err);
+        logger.error(`✗ shot ${shot.sequence} (${i + 1}/${eligible.length})`, err);
         await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
         results.push({ shotId: shot.id, sequence: shot.sequence, status: "error", error: extractErrorMessage(err) });
       }
@@ -1909,10 +1910,10 @@ async function handleBatchVideoGenerate(
           });
           await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
 
-          console.log(`[BatchVideoGenerate] Shot ${shot.sequence} completed`);
+          logger.debug(`Shot ${shot.sequence} completed`);
           return { shotId: shot.id, sequence: shot.sequence, status: "ok", videoUrl: result.filePath };
         } catch (err) {
-          console.error(`[BatchVideoGenerate] Error for shot ${shot.sequence}:`, err);
+          logger.error(`Error for shot ${shot.sequence}`, err);
           await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
           return { shotId: shot.id, sequence: shot.sequence, status: "error", error: extractErrorMessage(err) };
         }
@@ -1960,7 +1961,7 @@ async function handleSingleSceneFrame(
       slotContents,
     });
 
-    console.log(`[SingleSceneFrame] Shot ${shot.sequence}: generating scene-only frame (no character refs)`);
+    logger.debug(`Shot ${shot.sequence}: generating scene-only frame (no character refs)`);
 
     // Scene-only: no character reference images injected.
     const sceneFramePath = await imageProvider.generateImage(sceneFramePrompt, {
@@ -1993,7 +1994,7 @@ async function handleSingleSceneFrame(
 
     return NextResponse.json({ shotId, sceneRefFrame: sceneFramePath, status: "ok" });
   } catch (err) {
-    console.error(`[SingleSceneFrame] Error for shot ${shot.sequence}:`, err);
+    logger.error(`Error for shot ${shot.sequence}`, err);
     await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shotId));
     return NextResponse.json(
       { shotId, status: "error", error: extractErrorMessage(err) },
@@ -2047,8 +2048,8 @@ async function handleBatchSceneFrame(
 
   // Check if using ComfyUI (sequential execution required)
   const useSequential = isComfyUIProvider(modelConfig);
-  console.log(`[BatchSceneFrame] Processing ${allShots.length} shots, ${eligible.length} eligible`);
-  console.log(`[BatchSceneFrame] Execution mode: ${useSequential ? "SEQUENTIAL (ComfyUI)" : "PARALLEL"}`);
+  logger.info(`Processing ${allShots.length} shots, ${eligible.length} eligible`);
+  logger.info(`Execution mode: ${useSequential ? "SEQUENTIAL (ComfyUI)" : "PARALLEL"}`);
 
   const results: { shotId: string; sequence: number; status: "ok"; generated: number }[] = [];
 
@@ -2066,7 +2067,7 @@ async function handleBatchSceneFrame(
         continue;
       }
 
-      console.log(`[BatchSceneFrame] Shot ${shot.sequence} (${i + 1}/${allShots.length}): ${targets.length} refs`);
+      logger.debug(`Shot ${shot.sequence} (${i + 1}/${allShots.length}): ${targets.length} refs`);
 
       // Generate all ref images for this shot sequentially
       let generated = 0;
@@ -2081,10 +2082,10 @@ async function handleBatchSceneFrame(
             prompt: entry.prompt, fileUrl: imagePath, status: "completed",
             characters: entry.characters ?? undefined,
           });
-          console.log(`[BatchRefImage] Shot ${shot.sequence}: ref "${entry.id}" done`);
+          logger.debug(`Shot ${shot.sequence}: ref "${entry.id}" done`);
           generated++;
         } catch (err) {
-          console.warn(`[BatchRefImage] Shot ${shot.sequence} ref ${entry.id} failed:`, err);
+          logger.warn(`Shot ${shot.sequence} ref ${entry.id} failed`, err);
         }
       }
 
@@ -2104,7 +2105,7 @@ async function handleBatchSceneFrame(
           return { shotId: shot.id, sequence: shot.sequence, status: "ok" as const, generated: 0 };
         }
 
-        console.log(`[BatchSceneFrame] Shot ${shot.sequence}: ${targets.length} scene-only refs (no character injection)`);
+        logger.debug(`Shot ${shot.sequence}: ${targets.length} scene-only refs (no character injection)`);
 
         const genResults = await Promise.all(
           targets.map(async (entry) => {
@@ -2118,10 +2119,10 @@ async function handleBatchSceneFrame(
                 prompt: entry.prompt, fileUrl: imagePath, status: "completed",
                 characters: entry.characters ?? undefined,
               });
-              console.log(`[BatchRefImage] Shot ${shot.sequence}: ref "${entry.id}" done`);
+              logger.debug(`Shot ${shot.sequence}: ref "${entry.id}" done`);
               return true;
             } catch (err) {
-              console.warn(`[BatchRefImage] Shot ${shot.sequence} ref ${entry.id} failed:`, err);
+              logger.warn(`Shot ${shot.sequence} ref ${entry.id} failed`, err);
               return false;
             }
           })
@@ -2233,7 +2234,7 @@ async function handleSingleReferenceVideo(
       );
     }
 
-    console.log(`[SingleReferenceVideo] Shot ${shot.sequence}: ${sceneFramePaths.length} scene frame(s), ${charRefs.length} character ref(s)`);
+    logger.debug(`Shot ${shot.sequence}: ${sceneFramePaths.length} scene frame(s), ${charRefs.length} character ref(s)`);
 
     // Step 2: Build Seedance 2 multi-reference image list.
     //         Order matters — it becomes 图1, 图2, … in the mapping.
@@ -2287,7 +2288,7 @@ async function handleSingleReferenceVideo(
           sceneFrames: sceneFrameInfos,
           dialogues: dialogueList.length > 0 ? dialogueList : undefined,
         });
-        console.log(`[SingleReferenceVideo] Shot ${shot.sequence} promptRequest:\n${promptRequest}`);
+        logger.debug(`Shot ${shot.sequence} promptRequest`, promptRequest);
         const rawPrompt = await textProvider.generateText(promptRequest, {
           systemPrompt: refVideoSystem,
           images: sceneFramePaths,
@@ -2295,7 +2296,7 @@ async function handleSingleReferenceVideo(
         });
         videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
       } catch (err) {
-        console.warn("[SingleReferenceVideo] Vision prompt generation failed, falling back:", err);
+        logger.warn("Vision prompt generation failed, falling back", err);
         const fallback = buildReferenceVideoPrompt({
           videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
           cameraDirection: shot.cameraDirection || "static",
@@ -2308,7 +2309,7 @@ async function handleSingleReferenceVideo(
       }
     }
 
-    console.log(`[SingleReferenceVideo] Shot ${shot.sequence}: generating video with ${orderedRefImages.length} reference images`);
+    logger.debug(`Shot ${shot.sequence}: generating video with ${orderedRefImages.length} reference images`);
 
     const result = await videoProvider.generateVideo({
       initialImage: sceneFramePaths[0],
@@ -2330,7 +2331,7 @@ async function handleSingleReferenceVideo(
 
     return NextResponse.json({ shotId, referenceVideoUrl: result.filePath, status: "ok" });
   } catch (err) {
-    console.error(`[SingleReferenceVideo] Error for shot ${shot.sequence}:`, err);
+    logger.error(`Error for shot ${shot.sequence}`, err);
     await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shotId));
     return NextResponse.json(
       { shotId, status: "error", error: extractErrorMessage(err) },
@@ -2403,8 +2404,8 @@ async function handleBatchReferenceVideo(
 
   // Check if using ComfyUI (sequential execution required)
   const useSequential = isComfyUIProvider(modelConfig);
-  console.log(`[BatchReferenceVideo] Processing ${eligible.length} shots`);
-  console.log(`[BatchReferenceVideo] Execution mode: ${useSequential ? "SEQUENTIAL (ComfyUI)" : "PARALLEL"}`);
+  logger.info(`Processing ${eligible.length} shots`);
+  logger.info(`Execution mode: ${useSequential ? "SEQUENTIAL (ComfyUI)" : "PARALLEL"}`);
 
   await Promise.all(
     eligible.map((shot) =>
@@ -2502,7 +2503,7 @@ async function handleBatchReferenceVideo(
             });
             videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
           } catch (err) {
-            console.warn("[BatchReferenceVideo] Vision prompt generation failed, falling back:", err);
+            logger.warn("Vision prompt generation failed, falling back", err);
             const fallback = buildReferenceVideoPrompt({
               videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
               cameraDirection: shot.cameraDirection || "static",
@@ -2515,7 +2516,7 @@ async function handleBatchReferenceVideo(
           }
         }
 
-        console.log(`[BatchReferenceVideo] Shot ${shot.sequence} (${i + 1}/${eligible.length}): ${sceneFramePaths.length} scenes + ${charRefs.length} chars → video`);
+        logger.info(`Shot ${shot.sequence} (${i + 1}/${eligible.length}): ${sceneFramePaths.length} scenes + ${charRefs.length} chars → video`);
 
         const result = await videoProvider.generateVideo({
           initialImage: sceneFramePaths[0],
@@ -2532,10 +2533,10 @@ async function handleBatchReferenceVideo(
         });
         await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
 
-        console.log(`[BatchReferenceVideo] ✓ shot ${shot.sequence} (${i + 1}/${eligible.length})`);
+        logger.info(`✓ shot ${shot.sequence} (${i + 1}/${eligible.length})`);
         results.push({ shotId: shot.id, sequence: shot.sequence, status: "ok", referenceVideoUrl: result.filePath });
       } catch (err) {
-        console.error(`[BatchReferenceVideo] ✗ shot ${shot.sequence} (${i + 1}/${eligible.length}):`, err);
+        logger.error(`✗ shot ${shot.sequence} (${i + 1}/${eligible.length})`, err);
         await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
         results.push({
           shotId: shot.id,
@@ -2633,7 +2634,7 @@ async function handleBatchReferenceVideo(
               });
               videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
             } catch (err) {
-              console.warn("[BatchReferenceVideo] Vision prompt generation failed, falling back:", err);
+              logger.warn("Vision prompt generation failed, falling back", err);
               const fallback = buildReferenceVideoPrompt({
                 videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
                 cameraDirection: shot.cameraDirection || "static",
@@ -2646,7 +2647,7 @@ async function handleBatchReferenceVideo(
             }
           }
 
-          console.log(`[BatchReferenceVideo] Shot ${shot.sequence}: ${sceneFramePaths.length} scenes + ${charRefs.length} chars → video`);
+          logger.debug(`Shot ${shot.sequence}: ${sceneFramePaths.length} scenes + ${charRefs.length} chars → video`);
 
           const result = await videoProvider.generateVideo({
             initialImage: sceneFramePaths[0],
@@ -2663,10 +2664,10 @@ async function handleBatchReferenceVideo(
           });
           await db.update(shots).set({ status: "completed" }).where(eq(shots.id, shot.id));
 
-          console.log(`[BatchReferenceVideo] Shot ${shot.sequence} completed`);
+          logger.debug(`Shot ${shot.sequence} completed`);
           return { shotId: shot.id, sequence: shot.sequence, status: "ok", referenceVideoUrl: result.filePath };
         } catch (err) {
-          console.error(`[BatchReferenceVideo] Error for shot ${shot.sequence}:`, err);
+          logger.error(`Error for shot ${shot.sequence}`, err);
           await db.update(shots).set({ status: "failed" }).where(eq(shots.id, shot.id));
           return {
             shotId: shot.id,
@@ -2807,10 +2808,10 @@ async function handleVideoAssembleSync(projectId: string, payload?: Record<strin
         .where(eq(projects.id, projectId));
     }
 
-    console.log(`[VideoAssemble] Completed: ${result.videoPath}`);
+    logger.info(`Completed: ${result.videoPath}`);
     return NextResponse.json({ outputPath: result.videoPath, srtPath: result.srtPath, status: "ok" });
   } catch (err) {
-    console.error("[VideoAssemble] Error:", err);
+    logger.error("Error", err);
     return NextResponse.json({ status: "error", error: extractErrorMessage(err) }, { status: 500 });
   }
 }
@@ -2824,7 +2825,7 @@ async function handleSingleVideoPrompt(
   modelConfig?: ModelConfig
 ) {
   const shotId = payload?.shotId as string;
-  console.log(`[SingleVideoPrompt] called, shotId=${shotId}`);
+  logger.debug(`called, shotId=${shotId}`);
   if (!shotId) return NextResponse.json({ error: "shotId required" }, { status: 400 });
 
   const [shot] = await db.select().from(shots).where(eq(shots.id, shotId)).limit(1);
@@ -2863,7 +2864,7 @@ async function handleSingleVideoPrompt(
     if (shotView.lastFrame) visionFrames.push(shotView.lastFrame);
     if (visionFrames.length === 0 && shotView.sceneRefFrame) visionFrames.push(shotView.sceneRefFrame);
   }
-  console.log(`[SingleVideoPrompt] shot.sequence=${shot.sequence}, mode=${genMode}, frames=${visionFrames.length}`);
+  logger.debug(`shot.sequence=${shot.sequence}, mode=${genMode}, frames=${visionFrames.length}`);
   if (visionFrames.length === 0) {
     return NextResponse.json({ error: "No frame available. Generate frames first." }, { status: 400 });
   }
@@ -2924,17 +2925,17 @@ async function handleSingleVideoPrompt(
       sceneFrames: sceneFrameInfos,
       dialogues: dialogueList.length > 0 ? dialogueList : undefined,
     });
-    console.log(`[SingleVideoPrompt] Shot ${shot.sequence} promptRequest:\n${promptRequest}`);
+    logger.debug(`Shot ${shot.sequence} promptRequest`, promptRequest);
     const rawPrompt = await textProvider.generateText(promptRequest, {
       systemPrompt: refVideoSystem,
       images: visionFrames,
     });
     const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
-    console.log(`[SingleVideoPrompt] Shot ${shot.sequence} videoPrompt:\n${videoPrompt}`);
+    logger.debug(`Shot ${shot.sequence} videoPrompt`, videoPrompt);
     await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shotId));
     return NextResponse.json({ shotId, videoPrompt, status: "ok" });
   } catch (err) {
-    console.error("[SingleVideoPrompt] Error:", err);
+    logger.error("Error", err);
     return NextResponse.json({ status: "error", error: extractErrorMessage(err) }, { status: 500 });
   }
 }
@@ -2978,7 +2979,7 @@ async function handleBatchVideoPrompt(
   const refVideoSystem = await resolvePrompt("ref_video_prompt", { userId, projectId });
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
 
-  console.log(`[BatchVideoPrompt] Processing ${eligible.length} shots (${batchShots.length} total, ${batchCharacters.length} chars, mode=${batchGenMode}, concurrency=${VIDEO_PROMPT_CONCURRENCY})`);
+  logger.info(`Processing ${eligible.length} shots (${batchShots.length} total, ${batchCharacters.length} chars, mode=${batchGenMode}, concurrency=${VIDEO_PROMPT_CONCURRENCY})`);
   const bvpStartTime = Date.now();
 
   // Concurrent execution with configurable limit to avoid rate limits
@@ -3057,7 +3058,7 @@ async function handleBatchVideoPrompt(
         dialogues: dialogueList.length > 0 ? dialogueList : undefined,
       });
       // Debug: log vision frames info
-      console.log(`[BatchVideoPrompt] Shot ${shot.sequence} visionFrames:`, visionFrames.map((f) => ({ path: f, exists: path.resolve(f).startsWith("/") && fs.existsSync(path.resolve(f)) })));
+      logger.debug(`Shot ${shot.sequence} visionFrames`, visionFrames.map((f) => ({ path: f, exists: path.resolve(f).startsWith("/") && fs.existsSync(path.resolve(f)) })));
 
       let rawPrompt = "";
       try {
@@ -3067,7 +3068,7 @@ async function handleBatchVideoPrompt(
           images: visionFrames,
         });
       } catch (imageErr: any) {
-        console.warn(`[BatchVideoPrompt] Shot ${shot.sequence} image-based request failed, trying text-only:`, imageErr?.message?.substring(0, 200));
+        logger.warn(`Shot ${shot.sequence} image-based request failed, trying text-only`, imageErr?.message?.substring(0, 200));
         
         // 如果包含图像的请求失败，尝试纯文本模式
         try {
@@ -3075,29 +3076,29 @@ async function handleBatchVideoPrompt(
             systemPrompt: refVideoSystem,
             // 不传入images参数
           });
-          console.log(`[BatchVideoPrompt] Shot ${shot.sequence} text-only request succeeded`);
+          logger.info(`Shot ${shot.sequence} text-only request succeeded`);
         } catch (textErr: any) {
-          console.error(`[BatchVideoPrompt] Shot ${shot.sequence} text-only request also failed:`, textErr?.message?.substring(0, 200));
+          logger.error(`Shot ${shot.sequence} text-only request also failed`, textErr?.message?.substring(0, 200));
           
           // 如果纯文本也失败，使用备用提示
           rawPrompt = `基于剧本生成视频提示：${motionContext || shot.prompt || "无描述"}\n时长：${effectiveDuration}秒\n机位：${shot.cameraDirection || "static"}`;
-          console.log(`[BatchVideoPrompt] Shot ${shot.sequence} using fallback prompt`);
+          logger.info(`Shot ${shot.sequence} using fallback prompt`);
         }
       }
       
       const videoPrompt = `Duration: ${effectiveDuration}s.\n\n${rawPrompt.trim()}`;
       await db.update(shots).set({ videoPrompt }).where(eq(shots.id, shot.id));
-      console.log(`[BatchVideoPrompt] Shot ${shot.sequence} done (${((Date.now() - shotStart) / 1000).toFixed(1)}s, ${index + 1}/${eligible.length})`);
+      logger.info(`Shot ${shot.sequence} done (${((Date.now() - shotStart) / 1000).toFixed(1)}s, ${index + 1}/${eligible.length})`);
       results.push({ shotId: shot.id, status: "ok" });
     } catch (err) {
-      console.error(`[BatchVideoPrompt] Shot ${shot.sequence} failed (${index + 1}/${eligible.length}):`, err);
+      logger.error(`Shot ${shot.sequence} failed (${index + 1}/${eligible.length})`, err);
       results.push({ shotId: shot.id, status: "error" });
     }
   }, VIDEO_PROMPT_CONCURRENCY);
 
   const okCount = results.filter((r) => r.status === "ok").length;
   const errCount = results.filter((r) => r.status === "error").length;
-  console.log(`[BatchVideoPrompt] Done: ${okCount} ok, ${errCount} errors, total ${((Date.now() - bvpStartTime) / 1000).toFixed(1)}s`);
+  logger.info(`Done: ${okCount} ok, ${errCount} errors, total ${((Date.now() - bvpStartTime) / 1000).toFixed(1)}s`);
   return NextResponse.json({ results, status: "ok" });
 }
 
@@ -3232,10 +3233,10 @@ async function handleBatchRefImageGenerate(
           characters: entry.characters ?? undefined,
         });
         generated++;
-        console.log(`[BatchRefImage] Shot ${shot.sequence}: generated ref image "${entry.id}"`);
+        logger.debug(`Shot ${shot.sequence}: generated ref image "${entry.id}"`);
       } catch (err) {
         failed++;
-        console.warn(`[BatchRefImage] Shot ${shot.sequence}: failed ref image "${entry.id}":`, err);
+        logger.warn(`Shot ${shot.sequence}: failed ref image "${entry.id}"`, err);
       }
     }
 
@@ -3275,7 +3276,7 @@ async function handleSingleRefImageGenerate(
     return NextResponse.json({ error: "No prompt provided" }, { status: 400 });
   }
 
-  console.log(`[SingleRefImage] Shot ${shot.sequence}: generating scene-only ref image "${refImageId}"`);
+  logger.debug(`Shot ${shot.sequence}: generating scene-only ref image "${refImageId}"`);
 
   const ratio = (payload?.ratio as string) || "16:9";
   const imgOpts = ratioToImageOpts(
@@ -3335,7 +3336,7 @@ async function handleGenerateRefPrompts(
   // selectedVersionId on the client), retry without version — use the
   // shots that actually exist for this project+episode.
   if (allShots.length === 0 && batchVersionId) {
-    console.warn(`[GenerateRefPrompts] strict filter empty (versionId=${batchVersionId}), falling back to no-version filter`);
+    logger.warn(`strict filter empty (versionId=${batchVersionId}), falling back to no-version filter`);
     allShots = await db
       .select()
       .from(shots)
@@ -3418,7 +3419,7 @@ async function handleGenerateRefPrompts(
   for (let i = 0; i < allShots.length; i += BATCH_SIZE) {
     batches.push(allShots.slice(i, i + BATCH_SIZE));
   }
-  console.log(`[GenerateRefPrompts] Starting sequential batched generation: ${batches.length} batch(es) of up to ${BATCH_SIZE} shots, total ${total}`);
+  logger.info(`Starting sequential batched generation: ${batches.length} batch(es) of up to ${BATCH_SIZE} shots, total ${total}`);
 
   let updatedCount = 0;
   const failed: Array<{ seq: number; err: string }> = [];
@@ -3471,7 +3472,7 @@ async function handleGenerateRefPrompts(
         try {
           const entry = parsed.find((e) => e.shotSequence === shot.sequence);
           if (!entry) {
-            console.warn(`[GenerateRefPrompts] batch ${bi + 1}: shot ${shot.sequence} missing from LLM output`);
+            logger.warn(`batch ${bi + 1}: shot ${shot.sequence} missing from LLM output`);
             failed.push({ seq: shot.sequence, err: "missing from batch output" });
             continue;
           }
@@ -3491,7 +3492,7 @@ async function handleGenerateRefPrompts(
 
           const shotCharacters = Array.isArray(entry.characters) ? entry.characters : [];
           if (shotCharacters.length === 0) {
-            console.warn(`[GenerateRefPrompts] Shot ${shot.sequence}: AI did not emit 'characters' field`);
+            logger.warn(`Shot ${shot.sequence}: AI did not emit 'characters' field`);
           }
           await deleteAssetsByType(shot.id, "reference");
           for (let pi = 0; pi < sceneList.length; pi++) {
@@ -3522,18 +3523,18 @@ async function handleGenerateRefPrompts(
       }
       if (lastEntryForContinuity) previousBatchTail = lastEntryForContinuity;
       const elapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
-      console.log(`[GenerateRefPrompts] ✓ batch ${bi + 1}/${batches.length} (${batch[0].sequence}..${batch[batch.length - 1].sequence}): ${batchUpdated}/${batch.length} shots in ${elapsed}s`);
+      logger.info(`✓ batch ${bi + 1}/${batches.length} (${batch[0].sequence}..${batch[batch.length - 1].sequence}): ${batchUpdated}/${batch.length} shots in ${elapsed}s`);
     } catch (err) {
       const elapsed = ((Date.now() - batchStart) / 1000).toFixed(1);
-      console.warn(`[GenerateRefPrompts] ✗ batch ${bi + 1}/${batches.length} failed in ${elapsed}s: ${String(err)}`);
+      logger.warn(`✗ batch ${bi + 1}/${batches.length} failed in ${elapsed}s`, String(err));
       for (const shot of batch) failed.push({ seq: shot.sequence, err: String(err) });
     }
   }
 
   if (failed.length > 0) {
-    console.warn(`[GenerateRefPrompts] ${failed.length} shots failed:`, failed);
+    logger.warn(`${failed.length} shots failed`, failed);
   }
-  console.log(`[GenerateRefPrompts] Updated ${updatedCount}/${total} shots (sequential batched)`);
+  logger.info(`Updated ${updatedCount}/${total} shots (sequential batched)`);
   return NextResponse.json({ updatedCount, totalShots: total });
 }
 
@@ -3573,7 +3574,7 @@ async function handleSingleShotRefImageGenerateAll(
   // Build character mapping prompt prefix
   const promptPrefix = buildCharMappingPrefix(relevantChars);
 
-  console.log(`[RefImageGenAll] Shot ${shot.sequence}: using ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ")}`);
+  logger.debug(`Shot ${shot.sequence}: using ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ")}`);
 
   const ratio = (payload?.ratio as string) || "16:9";
   const imgOpts = ratioToImageOpts(
@@ -3598,9 +3599,9 @@ async function handleSingleShotRefImageGenerateAll(
         characters: entry.characters ?? undefined,
       });
       generated++;
-      console.log(`[RefImageGenAll] Shot ${shot.sequence}: generated ref "${entry.id}"`);
+      logger.debug(`Shot ${shot.sequence}: generated ref "${entry.id}"`);
     } catch (err) {
-      console.warn(`[RefImageGenAll] Shot ${shot.sequence} ref ${entry.id} failed:`, err);
+      logger.warn(`Shot ${shot.sequence} ref ${entry.id} failed`, err);
     }
   }
 
@@ -3636,7 +3637,7 @@ async function handleGenerateKeyframePrompts(
     .orderBy(asc(shots.sequence));
 
   if (allShots.length === 0 && batchVersionId) {
-    console.warn(`[GenerateKeyframePrompts] strict filter empty (versionId=${batchVersionId}), falling back to no-version filter`);
+    logger.warn(`strict filter empty (versionId=${batchVersionId}), falling back to no-version filter`);
     allShots = await db
       .select()
       .from(shots)
@@ -3707,7 +3708,7 @@ async function handleGenerateKeyframePrompts(
   const failed: Array<{ seq: number; err: string }> = [];
   const progressMap = new Map<string, { done: number; total: number }>();
 
-  console.log(`[GenerateKeyframePrompts] Starting limited concurrent generation (concurrency=${KEYFRAME_PROMPTS_CONCURRENCY}): 0/${total}`);
+  logger.info(`Starting limited concurrent generation (concurrency=${KEYFRAME_PROMPTS_CONCURRENCY}): 0/${total}`);
 
   // Process shots with concurrency limit
   const results = await pMapLimited(allShots, async (shot, index) => {
@@ -3769,18 +3770,18 @@ async function handleGenerateKeyframePrompts(
         characters: charsForShot,
       });
       updatedCount++;
-      console.log(`[GenerateKeyframePrompts] ✓ shot ${shot.sequence} (${index + 1}/${total})`);
+      logger.info(`✓ shot ${shot.sequence} (${index + 1}/${total})`);
       return { success: true, shot };
     } catch (err) {
       failed.push({ seq: shot.sequence, err: String(err) });
-      console.warn(`[GenerateKeyframePrompts] ✗ shot ${shot.sequence} (${index + 1}/${total}): ${String(err)}`);
+      logger.warn(`✗ shot ${shot.sequence} (${index + 1}/${total}): ${String(err)}`);
       return { success: false, shot };
     }
   }, KEYFRAME_PROMPTS_CONCURRENCY);
 
   if (failed.length > 0) {
-    console.warn(`[GenerateKeyframePrompts] ${failed.length} shots failed:`, failed);
+    logger.warn(`${failed.length} shots failed`, failed);
   }
-  console.log(`[GenerateKeyframePrompts] Updated ${updatedCount}/${allShots.length} (concurrency=${KEYFRAME_PROMPTS_CONCURRENCY})`);
+  logger.info(`Updated ${updatedCount}/${allShots.length} (concurrency=${KEYFRAME_PROMPTS_CONCURRENCY})`);
   return NextResponse.json({ updatedCount, totalShots: allShots.length, failedCount: failed.length });
 }

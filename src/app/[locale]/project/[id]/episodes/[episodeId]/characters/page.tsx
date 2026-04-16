@@ -13,6 +13,9 @@ import { apiFetch } from "@/lib/api-fetch";
 import { useModelGuard } from "@/hooks/use-model-guard";
 import { PromptEditButton } from "@/components/prompt-templates/prompt-edit-button";
 import { toast } from "sonner";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("project:id:episodes:episodeId:characters");
 
 export default function EpisodeCharactersPage() {
   const t = useTranslations();
@@ -51,7 +54,7 @@ export default function EpisodeCharactersPage() {
 
       await response.json();
     } catch (err) {
-      console.error("Character extract error:", err);
+      logger.error("Character extract error:", err);
       toast.error(t("common.generationFailed"));
     }
 
@@ -80,7 +83,7 @@ export default function EpisodeCharactersPage() {
         toast.warning(t("common.batchPartialFailed"));
       }
     } catch (err) {
-      console.error("Batch character image error:", err);
+      logger.error("Batch character image error:", err);
       toast.error(t("common.generationFailed"));
     }
 

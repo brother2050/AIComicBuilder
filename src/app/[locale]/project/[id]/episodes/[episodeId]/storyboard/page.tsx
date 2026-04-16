@@ -46,6 +46,9 @@ import { ShotKanban } from "@/components/editor/shot-kanban";
 import { VersionCompare } from "@/components/editor/version-compare";
 import { PromptEditButton } from "@/components/prompt-templates/prompt-edit-button";
 import Link from "next/link";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("project:id:episodes:episodeId:storyboard");
 
 export default function EpisodeStoryboardPage() {
   const t = useTranslations();
@@ -222,7 +225,7 @@ export default function EpisodeStoryboardPage() {
         }
       }
     } catch (err) {
-      console.error("Shot split error:", err);
+      logger.error("Shot split error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
     }
 
@@ -322,7 +325,7 @@ export default function EpisodeStoryboardPage() {
         }
       }
     } catch (err) {
-      console.error("Batch frame generate error:", err);
+      logger.error("Batch frame generate error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
     }
 
@@ -366,7 +369,7 @@ export default function EpisodeStoryboardPage() {
         toast.success(`All ${totalProcessed} shots completed`);
       }
     } catch (err) {
-      console.error("Batch video generate error:", err);
+      logger.error("Batch video generate error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
     }
 
@@ -410,7 +413,7 @@ export default function EpisodeStoryboardPage() {
         toast.success(`All ${totalProcessed} shots completed`);
       }
     } catch (err) {
-      console.error("Batch scene frame error:", err);
+      logger.error("Batch scene frame error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
     }
 
@@ -441,7 +444,7 @@ export default function EpisodeStoryboardPage() {
       await fetchProject(project.id, currentEpisodeId || undefined);
     } catch (err) {
       toast.error("Failed to generate ref prompts");
-      console.error(err);
+      logger.error(err);
     } finally {
       setGeneratingRefPrompts(false);
     }
@@ -472,7 +475,7 @@ export default function EpisodeStoryboardPage() {
       await fetchProject(project.id, currentEpisodeId || undefined);
     } catch (err) {
       toast.error("生成首尾帧提示词失败");
-      console.error(err);
+      logger.error(err);
     } finally {
       setGeneratingKeyframeAssets(false);
     }
@@ -550,7 +553,7 @@ export default function EpisodeStoryboardPage() {
         toast.success(`All ${totalProcessed} shots completed`);
       }
     } catch (err) {
-      console.error("Batch video prompt error:", err);
+      logger.error("Batch video prompt error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
     }
 
@@ -593,7 +596,7 @@ export default function EpisodeStoryboardPage() {
         toast.success(`All ${totalProcessed} shots completed`);
       }
     } catch (err) {
-      console.error("Batch reference video error:", err);
+      logger.error("Batch reference video error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
     }
 
@@ -642,7 +645,7 @@ export default function EpisodeStoryboardPage() {
         });
         if (!resp.ok) throw new Error(`Shot ${shot.sequence} failed`);
       } catch (err) {
-        console.error(`Retry failed for shot ${shot.id}:`, err);
+        logger.error(`Retry failed for shot ${shot.id}:`, err);
         newFailedIds.push(shot.id);
       }
       setBatchProgress((prev) =>

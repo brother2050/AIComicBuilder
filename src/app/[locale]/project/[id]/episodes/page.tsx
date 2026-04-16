@@ -11,6 +11,9 @@ import { EpisodeDialog } from "@/components/editor/episode-dialog";
 import { useEpisodeStore, type Episode } from "@/stores/episode-store";
 import { apiFetch } from "@/lib/api-fetch";
 import Link from "next/link";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("project:id:episodes");
 
 export default function EpisodesPage({
   params,
@@ -111,7 +114,7 @@ export default function EpisodesPage({
       toast.success(t("mergeSuccess"));
       exitSelectionMode();
     } catch (err) {
-      console.error("Merge error:", err);
+      logger.error("Merge error:", err);
       toast.error(err instanceof Error ? err.message : t("mergeError"));
     } finally {
       setMerging(false);

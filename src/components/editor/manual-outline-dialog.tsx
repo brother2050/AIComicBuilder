@@ -14,6 +14,9 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("manual-outline-dialog");
 
 interface ManualOutlineDialogProps {
   open: boolean;
@@ -44,7 +47,7 @@ export function ManualOutlineDialog({
       onOpenChange(false);
       toast.success(t("success"));
     } catch (err) {
-      console.error("Manual outline error:", err);
+      logger.error("Manual outline error:", err);
       toast.error(tc("generationFailed"));
     } finally {
       setSaving(false);

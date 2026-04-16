@@ -3,6 +3,9 @@ import type { AIProvider, TextOptions, ImageOptions } from "../types";
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger('SiliconFlowProvider');
 
 export class SiliconFlowProvider implements AIProvider {
   private client: OpenAI;
@@ -52,12 +55,12 @@ export class SiliconFlowProvider implements AIProvider {
       });
       return response.choices[0]?.message?.content || "";
     } catch (error: any) {
-      console.error("[SiliconFlowProvider] generateText error:", error?.message || error);
-      console.error("[SiliconFlowProvider] Model:", options?.model || this.defaultModel);
-      console.error("[SiliconFlowProvider] Has images:", options?.images?.length || 0);
-      console.error("[SiliconFlowProvider] Messages length:", messages.length);
+      logger.error("generateText error", error?.message || error);
+      logger.error("Model", options?.model || this.defaultModel);
+      logger.error("Has images", options?.images?.length || 0);
+      logger.error("Messages length", messages.length);
       if (error?.response?.data) {
-        console.error("[SiliconFlowProvider] Response data:", error.response.data);
+        logger.error("Response data", error.response.data);
       }
       throw error;
     }

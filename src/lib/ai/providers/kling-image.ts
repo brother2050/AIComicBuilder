@@ -3,6 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { id as genId } from "@/lib/id";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger(path.basename("src/lib/ai/providers/kling-image.ts", ".ts"));
 
 function generateKlingToken(accessKey: string, secretKey: string): string {
   const now = Math.floor(Date.now() / 1000);
@@ -90,7 +93,7 @@ export class KlingImageProvider implements AIProvider {
     }
 
     const taskId = submitJson.data.task_id;
-    console.log(`[Kling Image] Task submitted: ${taskId}`);
+    logger.debug(`Task submitted: ${taskId}`);
 
     // Poll for result
     const imageUrl = await this.pollForResult(taskId);
@@ -105,7 +108,7 @@ export class KlingImageProvider implements AIProvider {
     const filepath = path.join(dir, filename);
     fs.writeFileSync(filepath, buffer);
 
-    console.log(`[Kling Image] Saved to ${filepath}`);
+    logger.debug(`Saved to ${filepath}`);
     return filepath;
   }
 
@@ -130,7 +133,7 @@ export class KlingImageProvider implements AIProvider {
       }
 
       const { task_status, task_status_msg, task_result } = json.data;
-      console.log(`[Kling Image] Poll ${i + 1}: status=${task_status}`);
+      logger.debug(`Poll ${i + 1}: status=${task_status}`);
 
       if (task_status === "succeed") {
         const url = task_result.images?.[0]?.url;

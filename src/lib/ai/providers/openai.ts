@@ -3,6 +3,9 @@ import type { AIProvider, TextOptions, ImageOptions } from "../types";
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger(path.basename("src/lib/ai/providers/openai.ts", ".ts"));
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
@@ -52,12 +55,12 @@ export class OpenAIProvider implements AIProvider {
       });
       return response.choices[0]?.message?.content || "";
     } catch (error: any) {
-      console.error("[OpenAIProvider] generateText error:", error?.message || error);
-      console.error("[OpenAIProvider] Model:", options?.model || this.defaultModel);
-      console.error("[OpenAIProvider] Has images:", options?.images?.length || 0);
-      console.error("[OpenAIProvider] Messages length:", messages.length);
+      logger.error("generateText error", error?.message || error);
+      logger.error("Model", options?.model || this.defaultModel);
+      logger.error("Has images", options?.images?.length || 0);
+      logger.error("Messages length", messages.length);
       if (error?.response?.data) {
-        console.error("[OpenAIProvider] Response data:", error.response.data);
+        logger.error("Response data", error.response.data);
       }
       throw error;
     }

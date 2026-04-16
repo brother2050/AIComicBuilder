@@ -3,6 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { id as genId } from "@/lib/id";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger(path.basename("src/lib/ai/providers/kling-video.ts", ".ts"));
 
 function generateKlingToken(accessKey: string, secretKey: string): string {
   const now = Math.floor(Date.now() / 1000);
@@ -102,9 +105,7 @@ export class KlingVideoProvider implements VideoProvider {
       const imageData = toBase64(params.firstFrame!);
       const tailImageData = toBase64(params.lastFrame!);
 
-      console.log(
-        `[Kling Video] image2video: model=${this.model}, duration=${duration}s, ratio=${aspectRatio}`
-      );
+      logger.debug(`image2video: model=${this.model}, duration=${duration}s, ratio=${aspectRatio}`);
 
       const submitRes = await fetch(`${this.baseUrl}/v1/videos/image2video`, {
         method: "POST",
@@ -133,15 +134,13 @@ export class KlingVideoProvider implements VideoProvider {
         throw new Error(`Kling image2video error: ${submitJson.message}`);
       }
       taskId = submitJson.data.task_id;
-      console.log(`[Kling Video] image2video task submitted: ${taskId}`);
+      logger.debug(`image2video task submitted: ${taskId}`);
 
     } else {
       // ── Reference image mode: text2video with initial image ──
       const refImage = await toBase64FromPathOrUrl(params.initialImage!);
 
-      console.log(
-        `[Kling Video] text2video: model=${this.model}, duration=${duration}s, ratio=${aspectRatio}`
-      );
+      logger.debug(`text2video: model=${this.model}, duration=${duration}s, ratio=${aspectRatio}`);
 
       let submitRes = await fetch(`${this.baseUrl}/v1/videos/text2video`, {
         method: "POST",
@@ -161,7 +160,7 @@ export class KlingVideoProvider implements VideoProvider {
       // Fallback: if reference_image is unsupported (400/422), retry without it
       if (submitRes.status === 400 || submitRes.status === 422) {
         const fallbackBody = await submitRes.text().catch(() => "");
-        console.warn(`[Kling Video] text2video reference_image rejected (${submitRes.status}: ${fallbackBody}), retrying without ref images`);
+        logger.warn(`text2video reference_image rejected (${submitRes.status}: ${fallbackBody}), retrying without ref images`);
         submitRes = await fetch(`${this.baseUrl}/v1/videos/text2video`, {
           method: "POST",
           headers: {
@@ -187,7 +186,7 @@ export class KlingVideoProvider implements VideoProvider {
         throw new Error(`Kling text2video error: ${submitJson.message}`);
       }
       taskId = submitJson.data.task_id;
-      console.log(`[Kling Video] text2video task submitted: ${taskId}`);
+      logger.debug(`text2video task submitted: ${taskId}`);
     }
 
     const taskType = "firstFrame" in params ? "image2video" : "text2video";
@@ -202,7 +201,7 @@ export class KlingVideoProvider implements VideoProvider {
     const filepath = path.join(dir, filename);
     fs.writeFileSync(filepath, buffer);
 
-    console.log(`[Kling Video] Saved to ${filepath}`);
+    logger.debug(`Saved to ${filepath}`);
     return { filePath: filepath };
   }
 
@@ -231,7 +230,7 @@ export class KlingVideoProvider implements VideoProvider {
       }
 
       const { task_status, task_status_msg, task_result } = json.data;
-      console.log(`[Kling Video] Poll ${i + 1}: status=${task_status}`);
+      logger.debug(`Poll ${i + 1}: status=${task_status}`);
 
       if (task_status === "succeed") {
         const url = task_result.videos?.[0]?.url;

@@ -2,7 +2,9 @@ import ffmpeg from "fluent-ffmpeg";
 import fs from "node:fs";
 import path from "node:path";
 import { id as genId } from "@/lib/id";
+import { createLogger } from "@/lib/logger";
 
+const logger = createLogger('FFmpeg');
 const uploadDir = process.env.UPLOAD_DIR || "./uploads";
 
 type TransitionType = "cut" | "dissolve" | "fade_in" | "fade_out" | "wipeleft" | "slideright" | "circleopen";
@@ -303,8 +305,7 @@ export async function assembleVideo(params: AssembleParams): Promise<AssembleRes
           .run();
       });
     } catch (err) {
-      // Fallback: skip subtitle burn, use concat output directly
-      console.warn(`[FFmpeg] Subtitle burn failed, using concat output: ${err}`);
+      logger.warn("Subtitle burn failed, using concat output", err);
       fs.renameSync(concatOutputPath, outputPath);
     }
   } else {
@@ -340,7 +341,7 @@ export async function assembleVideo(params: AssembleParams): Promise<AssembleRes
           .run();
       });
     } catch (err) {
-      console.warn(`[FFmpeg] BGM mix failed, skipping: ${err}`);
+      logger.warn("BGM mix failed, skipping", err);
     }
   }
 

@@ -3,6 +3,9 @@ import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { db } from "@/lib/db";
 import { comfyuiProviders } from "@/lib/db/schema-comfyui";
 import { eq, and } from "drizzle-orm";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("comfyui:providers:id");
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -28,7 +31,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ provider });
   } catch (error) {
-    console.error("[comfyui/providers/[id]] GET error:", error);
+    logger.error("[comfyui/providers/[id]] GET error:", error);
     return NextResponse.json(
       { error: "Failed to fetch provider" },
       { status: 500 }
@@ -77,7 +80,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ provider });
   } catch (error) {
-    console.error("[comfyui/providers/[id]] PUT error:", error);
+    logger.error("[comfyui/providers/[id]] PUT error:", error);
     return NextResponse.json(
       { error: "Failed to update provider" },
       { status: 500 }
@@ -109,7 +112,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[comfyui/providers/[id]] DELETE error:", error);
+    logger.error("[comfyui/providers/[id]] DELETE error:", error);
     return NextResponse.json(
       { error: "Failed to delete provider" },
       { status: 500 }

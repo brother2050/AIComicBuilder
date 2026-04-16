@@ -16,6 +16,9 @@ import {
 import { useTranslations } from "next-intl";
 import { Loader2, Plus, Pencil, Trash2, TestTube, Eye, EyeOff, Check } from "lucide-react";
 import { toast } from "sonner";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("provider-manager");
 
 interface ComfyUIProviderConfig {
   id?: string;
@@ -62,7 +65,7 @@ export function ComfyUIProviderManager({
         setProviders(data.providers || []);
       }
     } catch (error) {
-      console.error("Failed to fetch providers:", error);
+      logger.error("Failed to fetch providers:", error);
     } finally {
       setLoading(false);
     }

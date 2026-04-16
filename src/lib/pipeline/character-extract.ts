@@ -7,6 +7,9 @@ import { resolvePrompt } from "@/lib/ai/prompts/resolver";
 import { and, eq } from "drizzle-orm";
 import { id as genId } from "@/lib/id";
 import type { Task } from "@/lib/task-queue";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger('CharacterExtract');
 
 interface ExtractedChar {
   name: string;
@@ -80,7 +83,7 @@ export async function handleCharacterExtract(task: Task) {
         const newNames = new Set(JSON.parse(dedupeResult) as string[]);
         newCharacters = extracted.filter((c) => newNames.has(c.name));
       } catch (dedupeErr) {
-        console.warn("[CharacterExtract] Deduplication failed, inserting all:", dedupeErr);
+        logger.warn("Deduplication failed, inserting all", dedupeErr);
       }
     }
   }
@@ -130,8 +133,7 @@ export async function handleCharacterExtract(task: Task) {
             description: rel.description || "",
           });
         } catch (e) {
-          // Skip duplicates or other errors silently
-          console.warn(`[CharacterExtract] Skipped relation ${rel.characterA}↔${rel.characterB}:`, e);
+          logger.warn(`Skipped relation ${rel.characterA}↔${rel.characterB}`, e);
         }
       }
     }

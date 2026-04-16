@@ -2,6 +2,9 @@ import { runMigrations } from "@/lib/db";
 import { initializeProviders } from "@/lib/ai/setup";
 import { registerPipelineHandlers } from "@/lib/pipeline";
 import { startWorker } from "@/lib/task-queue";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger('Bootstrap');
 
 let bootstrapped = false;
 
@@ -9,17 +12,17 @@ export function bootstrap() {
   if (bootstrapped) return;
   bootstrapped = true;
 
-  console.log("[Bootstrap] Running database migrations...");
+  logger.info("Running database migrations...");
   runMigrations();
 
-  console.log("[Bootstrap] Initializing AI providers...");
+  logger.info("Initializing AI providers...");
   initializeProviders();
 
-  console.log("[Bootstrap] Registering pipeline handlers...");
+  logger.info("Registering pipeline handlers...");
   registerPipelineHandlers();
 
-  console.log("[Bootstrap] Starting task worker...");
+  logger.info("Starting task worker...");
   startWorker();
 
-  console.log("[Bootstrap] Ready.");
+  logger.info("Ready.");
 }

@@ -4,6 +4,9 @@ import { id as genId } from "@/lib/id";
 import { db } from "@/lib/db";
 import { comfyuiWorkflows } from "@/lib/db/schema-comfyui";
 import { eq, and } from "drizzle-orm";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("comfyui:workflows");
 
 /**
  * GET /api/comfyui/workflows
@@ -21,7 +24,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ workflows });
   } catch (error) {
-    console.error("[comfyui/workflows] GET error:", error);
+    logger.error("[comfyui/workflows] GET error:", error);
     return NextResponse.json(
       { error: "Failed to fetch workflows" },
       { status: 500 }
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ workflow }, { status: 201 });
   } catch (error) {
-    console.error("[comfyui/workflows] POST error:", error);
+    logger.error("[comfyui/workflows] POST error:", error);
     return NextResponse.json(
       { error: "Failed to create workflow" },
       { status: 500 }

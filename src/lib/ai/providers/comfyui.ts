@@ -5,6 +5,9 @@ import { id as genId } from "@/lib/id";
 import { db } from "@/lib/db";
 import { comfyuiWorkflows, comfyuiProviders } from "@/lib/db/schema-comfyui";
 import { eq } from "drizzle-orm";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger(path.basename("src/lib/ai/providers/comfyui.ts", ".ts"));
 
 interface ComfyUIImageResult {
   filePath: string;
@@ -93,7 +96,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
   async generateText(prompt: string, options?: TextOptions): Promise<string> {
     // ComfyUI 主要用于图像生成，文本生成需要配置 LLM 节点
     // 这里提供一个基础的文本生成接口，实际使用时需要配置相应的工作流
-    console.log(`[ComfyUI] Text generation not natively supported, use workflow API`);
+    logger.debug("Text generation not natively supported, use workflow API");
     return prompt;
   }
 
@@ -101,7 +104,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     prompt: string,
     options?: ImageOptions
   ): Promise<string> {
-    console.log(`[ComfyUI] generateImage called with baseUrl: ${this.baseUrl}, workflowId: ${this.workflowId}`);
+    logger.debug("generateImage called with baseUrl: ${this.baseUrl}, workflowId: ${this.workflowId}");
     const result = await this.runWorkflow({
       prompt,
       model: options?.model || this.model,
@@ -115,7 +118,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
    * Generate video using ComfyUI workflow
    */
   async generateVideo(params: VideoGenerateParams): Promise<VideoGenerateResult> {
-    console.log(`[ComfyUI] generateVideo called with baseUrl: ${this.baseUrl}, workflowId: ${this.workflowId}`);
+    logger.debug("generateVideo called with baseUrl: ${this.baseUrl}, workflowId: ${this.workflowId}");
 
     const result = await this.runVideoWorkflow({
       prompt: params.prompt,
@@ -144,7 +147,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
   }): Promise<ComfyUIImageResult> {
     const { prompt, workflow, model, inputImages = [], extraData = {}, workflowId } = params;
 
-    console.log(`[ComfyUI] runWorkflow: this.baseUrl=${this.baseUrl}, workflowId=${workflowId}`);
+    logger.debug("runWorkflow: this.baseUrl=${this.baseUrl}, workflowId=${workflowId}");
 
     // 获取工作流数据：优先使用传入的工作流 > 数据库工作流 > 默认工作流
     let workflowData = workflow;
@@ -164,7 +167,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
             workflowData = JSON.parse(wf.workflowJson);
             // 标准化工作流链接格式（[[node_id, slot_index]] → [node_id, slot_index]）
             workflowData = this.normalizeWorkflowLinks(workflowData!);
-            console.log(`[ComfyUI] Loaded workflow "${wf.name}" from DB`);
+            logger.debug(`Loaded workflow "${wf.name}" from DB`);
             
             // 获取关联的 ComfyUI Provider 配置（仅作为备用）
             if (wf.providerId) {
@@ -184,23 +187,23 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
                 if (isLocalhostUrl) {
                   effectiveBaseUrl = providerConfigUrl;
                   effectiveApiKey = provider.apiKey || this.apiKey;
-                  console.log(`[ComfyUI] Using workflow's provider (localhost detected): ${effectiveBaseUrl}`);
+                  logger.debug(`Using workflow's provider (localhost detected): ${effectiveBaseUrl}`);
                 } else {
-                  console.log(`[ComfyUI] Using explicit baseUrl: ${this.baseUrl} (ignoring workflow's provider: ${providerConfigUrl})`);
+                  logger.debug(`Using explicit baseUrl: ${this.baseUrl} (ignoring workflow's provider: ${providerConfigUrl})`);
                 }
               }
             }
           } else {
             // 工作流不在数据库中，抛出错误而不是使用不兼容的默认工作流
-            console.log(`[ComfyUI] Workflow ${workflowId} not found in DB`);
+            logger.debug(`Workflow ${workflowId} not found in DB`);
             throw new Error(`Workflow ${workflowId} not found in database. Please select a valid workflow in Settings.`);
           }
         } catch (error) {
-          console.warn(`[ComfyUI] Error fetching workflow from DB:`, error);
+          logger.warn("Error fetching workflow from DB:", error);
           throw error; // 重新抛出错误，避免使用不兼容的默认工作流
         }
       } else {
-        console.log(`[ComfyUI] No workflowId provided, cannot use default workflow for remote ComfyUI`);
+        logger.debug("No workflowId provided, cannot use default workflow for remote ComfyUI");
         throw new Error("No workflowId provided. Please select a ComfyUI workflow in Settings.");
       }
     }
@@ -226,7 +229,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     const uniquePrefix = `aicb_${genId().slice(0, 12)}`;
     if (workflowData) {
       workflowData = this.setUniqueFilenamePrefix(workflowData, uniquePrefix);
-      console.log(`[ComfyUI] Set unique filename prefix: ${uniquePrefix}`);
+      logger.debug("Set unique filename prefix: ${uniquePrefix}");
     }
 
     // 添加额外数据
@@ -240,8 +243,8 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
 
     // 提交工作流
     const promptUrl = `${effectiveBaseUrl}/api/prompt`;
-    console.log(`[ComfyUI] Submitting workflow to ${promptUrl}`);
-    console.log(`[ComfyUI] Request headers:`, JSON.stringify(headers));
+    logger.debug("Submitting workflow to ${promptUrl}");
+    logger.debug("Request headers:", JSON.stringify(headers));
     
     const promptResponse = await fetch(promptUrl, {
       method: "POST",
@@ -269,7 +272,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       throw new Error(`ComfyUI workflow errors: ${errors}`);
     }
 
-    console.log(`[ComfyUI] Prompt submitted: ${promptData.prompt_id}`);
+    logger.debug("Prompt submitted: ${promptData.prompt_id}");
     this.currentPromptId = promptData.prompt_id;
 
     // 等待执行完成（使用 workflow 关联的 provider）
@@ -280,17 +283,17 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     fs.mkdirSync(outputDir, { recursive: true });
 
     const resultImages: string[] = [];
-    console.log(`[ComfyUI] Processing ${Object.keys(outputs).length} output nodes`);
+    logger.debug("Processing ${Object.keys(outputs).length} output nodes");
     
     // 如果 outputs 为空，尝试从版本历史获取图片
     if (Object.keys(outputs).length === 0) {
-      console.log(`[ComfyUI] No outputs in history, trying alternative methods...`);
+      logger.debug("No outputs in history, trying alternative methods...");
       
       // 方法1: 使用 prompt 序号获取历史
       try {
         const historyImages = await this.fetchLatestOutputImages(promptData.number, effectiveBaseUrl, effectiveApiKey);
         if (historyImages.length > 0) {
-          console.log(`[ComfyUI] Found ${historyImages.length} images from history`);
+          logger.debug("Found ${historyImages.length} images from history");
           for (const filename of historyImages) {
             const imageUrl = `${effectiveBaseUrl}/view?filename=${filename}`;
             const savedPath = await this.downloadImage(imageUrl, outputDir, effectiveApiKey);
@@ -298,7 +301,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
           }
         }
       } catch (e) {
-        console.error(`[ComfyUI] Method 1 (history by number) failed:`, e);
+        logger.error("Method 1 (history by number) failed:", e);
       }
       
       // 方法2: 获取所有历史并找到最新的图片
@@ -308,13 +311,13 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
           if (allImages.length > 0) {
             // 获取最近的图片（假设第一个就是最新的）
             const latestImage = allImages[0];
-            console.log(`[ComfyUI] Found latest image from history: ${latestImage}`);
+            logger.debug("Found latest image from history: ${latestImage}");
             const imageUrl = `${effectiveBaseUrl}/view?filename=${latestImage}`;
             const savedPath = await this.downloadImage(imageUrl, outputDir, effectiveApiKey);
             resultImages.push(savedPath);
           }
         } catch (e) {
-          console.error(`[ComfyUI] Method 2 (all history) failed:`, e);
+          logger.error("Method 2 (all history) failed:", e);
         }
       }
 
@@ -323,7 +326,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         try {
           const prefixImages = await this.fetchImagesByPrefix(uniquePrefix, effectiveBaseUrl, effectiveApiKey);
           if (prefixImages.length > 0) {
-            console.log(`[ComfyUI] Found ${prefixImages.length} images by prefix "${uniquePrefix}"`);
+            logger.debug(`Found ${prefixImages.length} images by prefix "${uniquePrefix}"`);
             for (const filename of prefixImages) {
               const imageUrl = `${effectiveBaseUrl}/view?filename=${encodeURIComponent(filename)}`;
               const savedPath = await this.downloadImage(imageUrl, outputDir, effectiveApiKey);
@@ -331,7 +334,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
             }
           }
         } catch (e) {
-          console.error(`[ComfyUI] Method 3 (prefix fetch) failed:`, e);
+          logger.error("Method 3 (prefix fetch) failed:", e);
         }
       }
 
@@ -340,7 +343,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         try {
           const outputImages = await this.fetchLatestOutputFromFolder(effectiveBaseUrl, effectiveApiKey);
           if (outputImages.length > 0) {
-            console.log(`[ComfyUI] Found ${outputImages.length} images from output folder`);
+            logger.debug("Found ${outputImages.length} images from output folder");
             for (const filename of outputImages) {
               const imageUrl = `${effectiveBaseUrl}/view?filename=${encodeURIComponent(filename)}`;
               const savedPath = await this.downloadImage(imageUrl, outputDir, effectiveApiKey);
@@ -348,36 +351,36 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
             }
           }
         } catch (e) {
-          console.error(`[ComfyUI] Method 4 (output folder) failed:`, e);
+          logger.error("Method 4 (output folder) failed:", e);
         }
       }
 
       }
     
     for (const [nodeId, output] of Object.entries(outputs)) {
-      console.log(`[ComfyUI] Node ${nodeId} output type: ${typeof output}, keys: ${Object.keys(output as object).join(",")}`);
+      logger.debug("Node ${nodeId} output type: ${typeof output}, keys: ${Object.keys(output as object).join(",")}");
       try {
         if (output && typeof output === "object") {
           // Check for ComfyUI image format: { images: [[filename, subfolder, type], ...] }
           if ("images" in output) {
             const imageData = output as { images: unknown[] };
-            console.log(`[ComfyUI] Found images array with ${imageData.images.length} items`);
-            console.log(`[ComfyUI] First image raw:`, JSON.stringify(imageData.images[0]));
+            logger.debug("Found images array with ${imageData.images.length} items");
+            logger.debug("First image raw:", JSON.stringify(imageData.images[0]));
             
             for (const image of imageData.images) {
-              console.log(`[ComfyUI] Processing image item, type: ${typeof image}, isArray: ${Array.isArray(image)}`);
+              logger.debug("Processing image item, type: ${typeof image}, isArray: ${Array.isArray(image)}");
               // Handle different image formats
               if (Array.isArray(image)) {
-                console.log(`[ComfyUI] Image is array, length: ${image.length}, first element type: ${typeof image[0]}`);
+                logger.debug("Image is array, length: ${image.length}, first element type: ${typeof image[0]}");
                 // ComfyUI can return nested arrays [[filename, subfolder, type]] or flat [filename, subfolder, type]
                 if (image.length > 0 && Array.isArray(image[0])) {
                   // Nested array format
-                  console.log(`[ComfyUI] Processing nested array format`);
+                  logger.debug("Processing nested array format");
                   for (const nestedImage of image as unknown[]) {
                     if (Array.isArray(nestedImage) && nestedImage.length >= 1) {
                       const [filename, subfolder = "", type = "output"] = nestedImage as string[];
                       const imageUrl = `${effectiveBaseUrl}/view?filename=${filename}&subfolder=${subfolder}&type=${type}`;
-                      console.log(`[ComfyUI] Downloading nested image: ${filename}`);
+                      logger.debug("Downloading nested image: ${filename}");
                       const savedPath = await this.downloadImage(imageUrl, outputDir, effectiveApiKey);
                       resultImages.push(savedPath);
                     }
@@ -386,25 +389,25 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
                   // Flat array format [filename, subfolder, type]
                   const [filename, subfolder = "", type = "output"] = image as string[];
                   const imageUrl = `${effectiveBaseUrl}/view?filename=${filename}&subfolder=${subfolder}&type=${type}`;
-                  console.log(`[ComfyUI] Downloading flat image: ${filename}`);
+                  logger.debug("Downloading flat image: ${filename}");
                   const savedPath = await this.downloadImage(imageUrl, outputDir, effectiveApiKey);
                   resultImages.push(savedPath);
                 }
               } else if (typeof image === "string") {
                 // Simple string path
                 const imageUrl = `${effectiveBaseUrl}/view?filename=${image}`;
-                console.log(`[ComfyUI] Downloading image (string): ${image}`);
+                logger.debug("Downloading image (string): ${image}");
                 const savedPath = await this.downloadImage(imageUrl, outputDir, effectiveApiKey);
                 resultImages.push(savedPath);
               } else if (typeof image === "object" && image !== null && "filename" in image) {
                 // Object format: { filename, subfolder, type }
                 const imgObj = image as { filename: string; subfolder?: string; type?: string };
                 const imageUrl = `${effectiveBaseUrl}/view?filename=${imgObj.filename}&subfolder=${imgObj.subfolder || ""}&type=${imgObj.type || "output"}`;
-                console.log(`[ComfyUI] Downloading image (object): ${imgObj.filename}`);
+                logger.debug("Downloading image (object): ${imgObj.filename}");
                 const savedPath = await this.downloadImage(imageUrl, outputDir, effectiveApiKey);
                 resultImages.push(savedPath);
               } else {
-                console.log(`[ComfyUI] Unknown image format:`, JSON.stringify(image));
+                logger.debug("Unknown image format:", JSON.stringify(image));
               }
             }
           }
@@ -412,25 +415,25 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
           else if ("image" in output) {
             const imagePath = (output as { image: string }).image;
             const imageUrl = `${effectiveBaseUrl}/view?filename=${imagePath}`;
-            console.log(`[ComfyUI] Downloading direct image: ${imagePath}`);
+            logger.debug("Downloading direct image: ${imagePath}");
             const savedPath = await this.downloadImage(imageUrl, outputDir, effectiveApiKey);
             resultImages.push(savedPath);
           }
         }
       } catch (nodeError) {
-        console.error(`[ComfyUI] Error processing node ${nodeId}:`, nodeError);
+        logger.error("Error processing node ${nodeId}:", nodeError);
       }
     }
 
     if (resultImages.length === 0) {
       // 详细诊断信息
-      console.error(`[ComfyUI] === DIAGNOSTIC INFO ===`);
-      console.error(`[ComfyUI] Workflow completed but no images retrieved.`);
-      console.error(`[ComfyUI] This is likely due to ComfyUI server configuration.`);
-      console.error(`[ComfyUI] Possible causes:`);
-      console.error(`[ComfyUI] 1. Server is not saving outputs to history`);
-      console.error(`[ComfyUI] 2. Check ComfyUI settings -> Settings -> System Stats -> Enable "Store outputs in History"`);
-      console.error(`[ComfyUI] 3. Alternatively, check if "execution_cached" is being used`);
+      logger.error("=== DIAGNOSTIC INFO ===");
+      logger.error("Workflow completed but no images retrieved.");
+      logger.error("This is likely due to ComfyUI server configuration.");
+      logger.error("Possible causes:");
+      logger.error("1. Server is not saving outputs to history");
+      logger.error("2. Check ComfyUI settings -> Settings -> System Stats -> Enable 'Store outputs in History'");
+      logger.error("3. Alternatively, check if 'execution_cached' is being used");
       throw new Error("ComfyUI workflow completed but no images were generated. Please check ComfyUI server settings: Enable 'Store outputs in History' in Settings.");
     }
 
@@ -578,7 +581,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
               const randomSeed = Math.floor(Math.random() * 0xFFFFFFFFFFFF);
               node.inputs.seed = randomSeed;
               seedSetCount++;
-              console.log(`[ComfyUI] Set random seed for node ${nodeId} (${node.class_type}): ${randomSeed}`);
+              logger.debug("Set random seed for node ${nodeId} (${node.class_type}): ${randomSeed}");
             }
           }
         }
@@ -586,7 +589,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     }
     
     if (seedSetCount === 0) {
-      console.log(`[ComfyUI] No KSampler nodes with seed parameter found in workflow`);
+      logger.debug("No KSampler nodes with seed parameter found in workflow");
     }
     
     return result;
@@ -640,7 +643,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
             // 设置唯一的 filename_prefix
             node.inputs.filename_prefix = prefix;
             const isVideo = videoOutputClassTypes.includes(node.class_type || "");
-            console.log(`[ComfyUI] Set filename_prefix for node ${nodeId} (${node.class_type}${isVideo ? ", VIDEO" : ""}): ${prefix}`);
+            logger.debug(`Set filename_prefix for node ${nodeId} (${node.class_type}${isVideo ? ", VIDEO" : ""}): ${prefix}`);
           }
         }
       }
@@ -687,19 +690,20 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         if (imageInputNodes.includes(node.class_type || "")) {
           const currentImage = node.inputs?.image as string | undefined;
           loadImageNodes.push({ nodeId, currentImage, classType: node.class_type || "" });
-          console.log(`[ComfyUI] Found LoadImage node ${nodeId} (${node.class_type}), current image: ${currentImage || "none"}`);
+          logger.debug(`Found LoadImage node ${nodeId} (${node.class_type}), current image: ${currentImage || "none"}`);
         }
       }
     }
 
-    console.log(`[ComfyUI] Found ${loadImageNodes.length} LoadImage nodes, ${imagePaths.length} images to assign`);
+    logger.debug(`Found ${loadImageNodes.length} LoadImage nodes, ${imagePaths.length} images to assign`);
 
     if (loadImageNodes.length === 0) {
-      console.warn(`[ComfyUI] WARNING: No LoadImage nodes found in workflow!`);
-      console.warn(`[ComfyUI] Available node types:`, [...new Set(Object.values(result).map((n: unknown) => {
+      logger.warn("WARNING: No LoadImage nodes found in workflow!");
+      const availableTypes = [...new Set(Object.values(result).map((n: unknown) => {
         const node = n as { class_type?: string };
         return node.class_type;
-      }).filter(Boolean))].slice(0, 20));
+      }).filter(Boolean))].slice(0, 20);
+      logger.warn("Available node types", availableTypes);
       return result;
     }
 
@@ -720,17 +724,17 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         
         // 标记图片用途
         if (i === 0) {
-          console.log(`[ComfyUI] Set firstFrame for node ${nodeId} (${classType}): ${imagePath}`);
+          logger.debug("Set firstFrame for node ${nodeId} (${classType}): ${imagePath}");
         } else if (i === 1 && imagePaths.length >= 2) {
-          console.log(`[ComfyUI] Set lastFrame for node ${nodeId} (${classType}): ${imagePath}`);
+          logger.debug("Set lastFrame for node ${nodeId} (${classType}): ${imagePath}");
         } else {
-          console.log(`[ComfyUI] Set image ${i + 1} for node ${nodeId} (${classType}): ${imagePath}`);
+          logger.debug("Set image ${i + 1} for node ${nodeId} (${classType}): ${imagePath}");
         }
       }
     }
 
     if (loadImageNodes.length < imagePaths.length) {
-      console.warn(`[ComfyUI] Warning: ${imagePaths.length - loadImageNodes.length} images not assigned (${loadImageNodes.length} nodes, ${imagePaths.length} images)`);
+      logger.warn("Warning: ${imagePaths.length - loadImageNodes.length} images not assigned (${loadImageNodes.length} nodes, ${imagePaths.length} images)");
     }
 
     return result;
@@ -770,7 +774,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     const buffer = await response.arrayBuffer();
     fs.writeFileSync(outputPath, Buffer.from(buffer));
 
-    console.log(`[ComfyUI] Video saved to: ${outputPath}`);
+    logger.debug("Video saved to: ${outputPath}");
     return outputPath;
   }
 
@@ -805,11 +809,11 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         if (contentType?.includes("jpeg") || contentType?.includes("jpg")) ext = "jpg";
         if (contentType?.includes("webp")) ext = "webp";
         const filename = `${prefix}.${ext}`;
-        console.log(`[ComfyUI] Found image by exact prefix match: ${filename}`);
+        logger.debug("Found image by exact prefix match: ${filename}");
         return [filename];
       }
     } catch (e) {
-      console.log(`[ComfyUI] Exact prefix match failed:`, e);
+      logger.debug("Exact prefix match failed:", e);
     }
 
     // 方法2: 尝试获取目录下的文件列表并过滤
@@ -822,7 +826,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
           const listResponse = await fetch(`${baseUrl}/api/folder?path=${folder}`, { headers });
           if (listResponse.ok) {
             const data = await listResponse.json();
-            console.log(`[ComfyUI] Folder ${folder} response:`, JSON.stringify(data).slice(0, 300));
+            logger.debug("Folder ${folder} response:", JSON.stringify(data).slice(0, 300));
             
             // 解析文件列表
             if (Array.isArray(data)) {
@@ -842,16 +846,16 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
             }
             
             if (images.length > 0) {
-              console.log(`[ComfyUI] Found ${images.length} images with prefix "${prefix}" in ${folder}`);
+              logger.debug(`Found ${images.length} images with prefix "${prefix}" in ${folder}`);
               break;
             }
           }
         } catch (e) {
-          console.log(`[ComfyUI] Failed to list folder ${folder}:`, e);
+          logger.debug(`Failed to list folder ${folder}:`, e);
         }
       }
     } catch (e) {
-      console.log(`[ComfyUI] Folder listing failed:`, e);
+      logger.debug("Folder listing failed:", e);
     }
 
     // 方法3: 尝试直接访问 /output 目录
@@ -860,7 +864,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         const outputResponse = await fetch(`${baseUrl}/output/`, { headers });
         if (outputResponse.ok) {
           const html = await outputResponse.text();
-          console.log(`[ComfyUI] /output/ response length: ${html.length}`);
+          logger.debug(`/output/ response length: ${html.length}`);
           
           // 从 HTML 中提取文件名
           const matches = html.match(/href="([^"]*?)"/g) || [];
@@ -872,11 +876,11 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
           }
           
           if (images.length > 0) {
-            console.log(`[ComfyUI] Found ${images.length} images from /output/ HTML`);
+            logger.debug("Found ${images.length} images from /output/ HTML");
           }
         }
       } catch (e) {
-        console.log(`[ComfyUI] /output/ access failed:`, e);
+        logger.debug("/output/ access failed:", e);
       }
     }
 
@@ -942,16 +946,14 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     
     // 显示替换的节点和提示词内容（限制 1000 字以内）
     const replacedNodes = replacedNodePrompts.map(r => r.node);
-    console.log(`[ComfyUI] Replaced prompts in ${replacedNodes.length} nodes:`, replacedNodes);
+    logger.debug("Replaced prompts in ${replacedNodes.length} nodes:", replacedNodes);
     for (const { node, prompt } of replacedNodePrompts) {
-      // const truncatedPrompt = prompt.length > 1000 ? `${prompt.slice(0, 1000)}...` : prompt;
-      // console.log(`  ${node}: "${truncatedPrompt}"`);
-      console.log(`  ${node}: "${prompt}"`);
+      logger.debug(`  ${node}: "${prompt}"`);
     }
     
     if (replacedNodes.length === 0) {
-      console.warn(`[ComfyUI] WARNING: No CLIPTextEncode nodes found in workflow!`);
-      console.warn(`[ComfyUI] Available nodes:`, Object.keys(result).join(", "));
+      logger.warn("WARNING: No CLIPTextEncode nodes found in workflow!");
+      logger.warn("Available nodes:", Object.keys(result).join(", "));
     }
     
     return result;
@@ -1013,7 +1015,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     const localPath = this.resolveLocalPath(filePath);
     const filename = path.basename(localPath);
 
-    console.log(`[ComfyUI] Uploading image: ${filePath} -> ${localPath}`);
+    logger.debug("Uploading image: ${filePath} -> ${localPath}");
 
     // 检查文件是否存在
     if (!fs.existsSync(localPath)) {
@@ -1052,7 +1054,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     const targetBaseUrl = baseUrl || this.baseUrl;
     const wsUrl = targetBaseUrl.replace(/^http/, "ws");
     
-    console.log(`[ComfyUI] WebSocket: Connecting to ${wsUrl} for prompt ${promptId}`);
+    logger.debug("WebSocket: Connecting to ${wsUrl} for prompt ${promptId}");
     
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -1068,7 +1070,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         ws = new WebSocket(`${wsUrl}/ws?clientId=${genId()}`);
 
         ws.onopen = () => {
-          console.log(`[ComfyUI] WebSocket connected`);
+          logger.debug("WebSocket connected");
           // 订阅执行相关消息
           ws?.send(JSON.stringify({
             type: "subscribe",
@@ -1082,9 +1084,9 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
             
             // 处理执行完成消息
             if (msg.type === "execution-success" && msg.data?.prompt_id === promptId) {
-              console.log(`[ComfyUI] WebSocket: execution-success for ${promptId}`);
-              console.log(`[ComfyUI] WebSocket: Executed nodes: ${executedNodes.join(", ")}`);
-              console.log(`[ComfyUI] WebSocket: Outputs collected: ${Object.keys(outputs).length}`);
+              logger.debug("WebSocket: execution-success for ${promptId}");
+              logger.debug("WebSocket: Executed nodes: ${executedNodes.join(", ")}");
+              logger.debug("WebSocket: Outputs collected: ${Object.keys(outputs).length}");
               
               clearTimeout(timeout);
               ws?.close();
@@ -1101,13 +1103,13 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
               const nodeId = msg.data.node;
               if (nodeId && msg.data.output) {
                 outputs[nodeId] = msg.data.output;
-                console.log(`[ComfyUI] WebSocket: Captured output for node ${nodeId}`);
+                logger.debug("WebSocket: Captured output for node ${nodeId}");
               }
             }
             
             // 处理执行错误
             if (msg.type === "execution-error") {
-              console.error(`[ComfyUI] WebSocket: execution-error`, msg.data);
+              logger.error("WebSocket: execution-error", msg.data);
               clearTimeout(timeout);
               ws?.close();
               reject(new Error(`ComfyUI execution error: ${JSON.stringify(msg.data)}`));
@@ -1115,7 +1117,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
             
             // 处理进度消息
             if (msg.type === "progress") {
-              console.log(`[ComfyUI] WebSocket: Progress - ${msg.data_i}`);
+              logger.debug("WebSocket: Progress - ${msg.data_i}");
             }
           } catch (parseError) {
             // 忽略非 JSON 消息
@@ -1123,11 +1125,11 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         };
 
         ws.onerror = (error) => {
-          console.error(`[ComfyUI] WebSocket error:`, error);
+          logger.error("WebSocket error:", error);
         };
 
         ws.onclose = () => {
-          console.log(`[ComfyUI] WebSocket closed`);
+          logger.debug("WebSocket closed");
         };
       } catch (error) {
         clearTimeout(timeout);
@@ -1149,7 +1151,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     const targetBaseUrl = baseUrl || this.baseUrl;
     const headers: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 
-    console.log(`[ComfyUI] Starting to wait for completion: ${promptId} at ${targetBaseUrl}`);
+    logger.debug("Starting to wait for completion: ${promptId} at ${targetBaseUrl}");
     
     // 首先尝试 HTTP polling 方式
     for (let i = 0; i < maxAttempts; i++) {
@@ -1162,7 +1164,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
 
         if (!historyResponse.ok) {
           if (i % 5 === 0) {
-            console.log(`[ComfyUI] History request failed: ${historyResponse.status}`);
+            logger.debug("History request failed: ${historyResponse.status}");
           }
           continue;
         }
@@ -1171,18 +1173,18 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         
         if (!history[promptId]) {
           if (i % 5 === 0) {
-            console.log(`[ComfyUI] Prompt ${promptId} not in history yet (${i + 1}/${maxAttempts})`);
+            logger.debug("Prompt ${promptId} not in history yet (${i + 1}/${maxAttempts})");
           }
           continue;
         }
 
         const item = history[promptId];
-        console.log(`[ComfyUI] Status: ${item.status.status_str}`);
+        logger.debug(`Status: ${item.status.status_str}`);
         
         if (item.status.status_str === "success") {
           const execTime = item.status.exec_time;
-          console.log(`[ComfyUI] Workflow completed${execTime !== undefined ? ` in ${execTime.toFixed(2)}s` : ""}`);
-          console.log(`[ComfyUI] Outputs: ${Object.keys(item.outputs).length} nodes`);
+          logger.debug(`Workflow completed${execTime !== undefined ? ` in ${execTime.toFixed(2)}s` : ""}`);
+          logger.debug(`Outputs: ${Object.keys(item.outputs).length} nodes`);
           return item.outputs;
         }
         if (item.status.errors && item.status.errors.length > 0) {
@@ -1190,10 +1192,10 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         }
         
         if (i % 10 === 0) {
-          console.log(`[ComfyUI] Still running... (${i + 1}/${maxAttempts})`);
+          logger.debug("Still running... (${i + 1}/${maxAttempts})");
         }
       } catch (error) {
-        console.error(`[ComfyUI] Error checking status:`, error);
+        logger.error("Error checking status:", error);
       }
     }
 
@@ -1205,7 +1207,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
    */
   private async downloadImage(url: string, outputDir: string, apiKey?: string): Promise<string> {
     const effectiveApiKey = apiKey || this.apiKey;
-    console.log(`[ComfyUI] Downloading from ${url} with API key: ${effectiveApiKey ? "yes" : "no"}`);
+    logger.debug(`Downloading from ${url} with API key: ${effectiveApiKey ? "yes" : "no"}`);
     const response = await fetch(url, {
       headers: effectiveApiKey ? { Authorization: `Bearer ${effectiveApiKey}` } : {},
     });
@@ -1248,9 +1250,9 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     try {
       const response = await fetch(`${baseUrl}/api/view?filename=`, { headers });
       // 这个 API 可能不可用，尝试其他方式
-      console.log(`[ComfyUI] Output folder API response: ${response.status}`);
+      logger.debug("Output folder API response: ${response.status}");
     } catch (e) {
-      console.log(`[ComfyUI] Output folder API not accessible:`, e);
+      logger.debug("Output folder API not accessible:", e);
     }
 
     // 尝试获取最近保存的图片列表
@@ -1258,7 +1260,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       const response = await fetch(`${baseUrl}/api/files?path=output`, { headers });
       if (response.ok) {
         const data = await response.json();
-        console.log(`[ComfyUI] Output folder contents:`, JSON.stringify(data).slice(0, 500));
+        logger.debug("Output folder contents:", JSON.stringify(data).slice(0, 500));
         
         // 解析文件列表
         const images: string[] = [];
@@ -1278,7 +1280,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         return images.slice(0, 10); // 只返回最近 10 张
       }
     } catch (e) {
-      console.log(`[ComfyUI] Failed to fetch output folder:`, e);
+      logger.debug("Failed to fetch output folder:", e);
     }
 
     return [];
@@ -1300,12 +1302,12 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     // 尝试获取指定 prompt 版本的图片列表
     const response = await fetch(`${baseUrl}/api/history/${promptNumber}`, { headers });
     if (!response.ok) {
-      console.log(`[ComfyUI] History for prompt ${promptNumber} not available: ${response.status}`);
+      logger.debug("History for prompt ${promptNumber} not available: ${response.status}");
       return [];
     }
 
     const data = await response.json();
-    console.log(`[ComfyUI] History response for prompt ${promptNumber}: ${Object.keys(data).length} keys`);
+    logger.debug("History response for prompt ${promptNumber}: ${Object.keys(data).length} keys");
     
     // 查找包含图片的输出
     const images: string[] = [];
@@ -1342,12 +1344,12 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     // 获取最近的历史记录
     const response = await fetch(`${baseUrl}/api/history?max_entries=10`, { headers });
     if (!response.ok) {
-      console.log(`[ComfyUI] Failed to fetch history: ${response.status}`);
+      logger.debug("Failed to fetch history: ${response.status}");
       return [];
     }
 
     const data = await response.json();
-    console.log(`[ComfyUI] History entries count: ${Object.keys(data).length}`);
+    logger.debug("History entries count: ${Object.keys(data).length}");
     
     const images: string[] = [];
     
@@ -1372,7 +1374,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       }
     }
     
-    console.log(`[ComfyUI] Found ${images.length} total images in history`);
+    logger.debug("Found ${images.length} total images in history");
     return images;
   }
 
@@ -1429,7 +1431,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     let effectiveBaseUrl = this.baseUrl;
     let effectiveApiKey = this.apiKey;
 
-    console.log(`[ComfyUI] runVideoWorkflow: this.baseUrl=${this.baseUrl}, effectiveBaseUrl=${effectiveBaseUrl}, workflowId=${workflowId}`);
+    logger.debug("runVideoWorkflow: this.baseUrl=${this.baseUrl}, effectiveBaseUrl=${effectiveBaseUrl}, workflowId=${workflowId}");
 
     if (workflowId) {
       try {
@@ -1441,8 +1443,8 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
         if (wf) {
           workflowData = JSON.parse(wf.workflowJson);
           workflowData = this.normalizeWorkflowLinks(workflowData!);
-          console.log(`[ComfyUI] Loaded video workflow "${wf.name}" from DB`);
-          console.log(`[ComfyUI] Workflow providerId: "${wf.providerId}"`);
+          logger.debug(`Loaded video workflow "${wf.name}" from DB`);
+          logger.debug(`Workflow providerId: "${wf.providerId}"`);
 
           // 只有当没有显式提供 baseUrl 时，才使用 workflow 关联的 provider
           if (wf.providerId) {
@@ -1462,21 +1464,21 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
               if (isLocalhostUrl) {
                 effectiveBaseUrl = providerConfigUrl;
                 effectiveApiKey = provider.apiKey || this.apiKey;
-                console.log(`[ComfyUI] Using workflow's provider (localhost detected): ${effectiveBaseUrl}`);
+                logger.debug(`Using workflow's provider (localhost detected): ${effectiveBaseUrl}`);
               } else {
-                console.log(`[ComfyUI] Using explicit baseUrl: ${this.baseUrl} (ignoring workflow's provider: ${providerConfigUrl})`);
+                logger.debug(`Using explicit baseUrl: ${this.baseUrl} (ignoring workflow's provider: ${providerConfigUrl})`);
               }
             } else {
-              console.log(`[ComfyUI] Provider ${wf.providerId} not found in DB, using this.baseUrl: ${this.baseUrl}`);
+              logger.debug("Provider ${wf.providerId} not found in DB, using this.baseUrl: ${this.baseUrl}");
             }
           } else {
-            console.log(`[ComfyUI] Workflow has no providerId, using this.baseUrl: ${this.baseUrl}`);
+            logger.debug("Workflow has no providerId, using this.baseUrl: ${this.baseUrl}");
           }
         } else {
           throw new Error(`Video workflow ${workflowId} not found in database. Please select a valid workflow in Settings.`);
         }
       } catch (error) {
-        console.warn(`[ComfyUI] Error fetching video workflow from DB:`, error);
+        logger.warn("Error fetching video workflow from DB:", error);
         throw error;
       }
     } else {
@@ -1486,7 +1488,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     // 上传输入图片
     const uploadedImages: string[] = [];
     const inputImages = [initialImage, firstFrame, lastFrame].filter(Boolean) as string[];
-    console.log(`[ComfyUI] Uploading ${inputImages.length} images to ${effectiveBaseUrl}`);
+    logger.debug("Uploading ${inputImages.length} images to ${effectiveBaseUrl}");
     for (const imgPath of inputImages) {
       const uploadedPath = await this.uploadImage(imgPath, effectiveBaseUrl, effectiveApiKey);
       uploadedImages.push(uploadedPath);
@@ -1511,14 +1513,14 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     const uniquePrefix = `aicb_${genId().slice(0, 12)}`;
     if (workflowData) {
       workflowData = this.setUniqueFilenamePrefix(workflowData, uniquePrefix);
-      console.log(`[ComfyUI] Set unique filename prefix: ${uniquePrefix}`);
+      logger.debug("Set unique filename prefix: ${uniquePrefix}");
     }
 
     // 创建 headers
     const headers: Record<string, string> = effectiveApiKey ? { Authorization: `Bearer ${effectiveApiKey}` } : {};
 
     // 提交工作流
-    console.log(`[ComfyUI] Submitting workflow to ${effectiveBaseUrl}/api/prompt`);
+    logger.debug("Submitting workflow to ${effectiveBaseUrl}/api/prompt");
     const promptResponse = await fetch(`${effectiveBaseUrl}/api/prompt`, {
       method: "POST",
       headers,
@@ -1545,7 +1547,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
       throw new Error(`ComfyUI video workflow errors: ${errors}`);
     }
 
-    console.log(`[ComfyUI] Video prompt submitted: ${promptData.prompt_id}`);
+    logger.debug("Video prompt submitted: ${promptData.prompt_id}");
 
     // 等待执行完成
     const outputs = await this.waitForCompletion(promptData.prompt_id, 600, 5000, effectiveBaseUrl, effectiveApiKey);
@@ -1558,21 +1560,21 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     let lastFrameUrl: string | undefined;
 
     for (const [nodeId, output] of Object.entries(outputs)) {
-      console.log(`[ComfyUI] Video node ${nodeId} output type: ${typeof output}`);
-      console.log(`[ComfyUI] Video node ${nodeId} output keys: ${output && typeof output === "object" ? Object.keys(output).join(", ") : "N/A"}`);
-      console.log(`[ComfyUI] Video node ${nodeId} output: ${JSON.stringify(output).slice(0, 500)}`);
+      logger.debug(`Video node ${nodeId} output type: ${typeof output}`);
+      logger.debug(`Video node ${nodeId} output keys: ${output && typeof output === "object" ? Object.keys(output).join(", ") : "N/A"}`);
+      logger.debug(`Video node ${nodeId} output: ${JSON.stringify(output).slice(0, 500)}`);
       try {
         if (output && typeof output === "object") {
           // Check for ComfyUI video format: { videos: [[filename, subfolder, type], ...] }
           if ("videos" in output) {
             const videoData = output as { videos: unknown[] };
-            console.log(`[ComfyUI] Found videos array with ${videoData.videos.length} items`);
+            logger.debug(`Found videos array with ${videoData.videos.length} items`);
 
             for (const video of videoData.videos) {
               if (Array.isArray(video) && video.length >= 1) {
                 const [filename, subfolder = "", type = "output"] = video as string[];
                 const videoUrl = `${effectiveBaseUrl}/view?filename=${filename}&subfolder=${subfolder}&type=${type}`;
-                console.log(`[ComfyUI] Downloading video: ${filename}`);
+                logger.debug(`Downloading video: ${filename}`);
                 const savedPath = await this.downloadVideo(videoUrl, outputDir, effectiveApiKey);
                 resultVideos.push(savedPath);
               } else if (typeof video === "string") {
@@ -1591,7 +1593,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
               if (Array.isArray(item) && item.length >= 1) {
                 const [filename, subfolder = "", type = "output"] = item as string[];
                 const videoUrl = `${effectiveBaseUrl}/view?filename=${filename}&subfolder=${subfolder}&type=${type}`;
-                console.log(`[ComfyUI] Downloading video (VHS): ${filename}`);
+                logger.debug("Downloading video (VHS): ${filename}");
                 const savedPath = await this.downloadVideo(videoUrl, outputDir, effectiveApiKey);
                 resultVideos.push(savedPath);
               } else if (item && typeof item === "object" && "filename" in item) {
@@ -1601,7 +1603,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
                 const subfolder = itemObj.subfolder || "";
                 const type = itemObj.type || "output";
                 const videoUrl = `${effectiveBaseUrl}/view?filename=${filename}&subfolder=${subfolder}&type=${type}`;
-                console.log(`[ComfyUI] Downloading video (Wan2.2): ${filename}`);
+                logger.debug("Downloading video (Wan2.2): ${filename}");
                 const savedPath = await this.downloadVideo(videoUrl, outputDir, effectiveApiKey);
                 resultVideos.push(savedPath);
                 if ((filename.endsWith(".mp4") || filename.endsWith(".webm")) && !lastFrameUrl) {
@@ -1609,7 +1611,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
                 }
               } else if (typeof item === "string") {
                 const videoUrl = `${effectiveBaseUrl}/view?filename=${item}`;
-                console.log(`[ComfyUI] Downloading video: ${item}`);
+                logger.debug("Downloading video: ${item}");
                 const savedPath = await this.downloadVideo(videoUrl, outputDir, effectiveApiKey);
                 resultVideos.push(savedPath);
               }
@@ -1617,12 +1619,12 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
           }
         }
       } catch (nodeError) {
-        console.error(`[ComfyUI] Error processing video node ${nodeId}:`, nodeError);
+        logger.error("Error processing video node ${nodeId}:", nodeError);
       }
     }
 
     if (resultVideos.length === 0) {
-      console.error(`[ComfyUI] No videos generated from workflow`);
+      logger.error("No videos generated from workflow");
       throw new Error("ComfyUI video workflow completed but no videos were generated. Please check your workflow configuration.");
     }
 

@@ -3,6 +3,9 @@ import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { db } from "@/lib/db";
 import { comfyuiGenerations } from "@/lib/db/schema-comfyui";
 import { eq, and } from "drizzle-orm";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("comfyui:status:id");
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -36,7 +39,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       completedAt: generation.completedAt,
     });
   } catch (error) {
-    console.error("[comfyui/status/[id]] GET error:", error);
+    logger.error("[comfyui/status/[id]] GET error:", error);
     return NextResponse.json(
       { error: "Failed to fetch status" },
       { status: 500 }
